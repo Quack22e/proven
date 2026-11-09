@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "proven"
+version = "0.1.0"
+description = "Checks the reasons in month-end variance explanations against the general ledger."
+readme = "README.md"
+requires-python = ">=3.10"
+# The core needs nothing outside the standard library (asserted by proven/tests/test_isolation.py).
+dependencies = []
+
+[project.optional-dependencies]
+claude = ["anthropic"]   # only for the opt-in Claude extractor
+dev = ["pytest>=7"]
+
+[project.scripts]
+proven = "proven.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["proven*"]
+
+[tool.setuptools.package-data]
+proven = ["web/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["proven/tests"]

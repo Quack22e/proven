@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Proven · Review</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-name">Proven</span>
+      <span class="brand-tag">variance explanations, checked against the ledger</span>
+    </div>
+    <nav class="tabs" aria-label="Views">
+      <button type="button" class="tab" data-view="review" aria-current="page">Review</button>
+      <button type="button" class="tab" data-view="benchmark">Benchmark</button>
+    </nav>
+    <div class="status" id="status" aria-live="polite"></div>
+  </header>
+
+  <div class="banner" id="banner" role="alert" hidden></div>
+
+  <main>
+    <section id="view-review" class="view" aria-labelledby="review-heading">
+      <h1 id="review-heading" class="sr-only">Review</h1>
+      <form class="toolbar" id="toolbar">
+        <label class="field">
+          <span class="field-label">Close</span>
+          <select id="scenario"></select>
+        </label>
+        <label class="field">
+          <span class="field-label">Extractor</span>
+          <select id="extractor"></select>
+        </label>
+        <button type="submit" class="button primary" id="verify">Verify</button>
+        <span class="run-meta" id="run-meta"></span>
+      </form>
+
+      <div class="layout">
+        <div class="col">
+          <section class="panel" aria-labelledby="explanation-heading">
+            <div class="panel-head">
+              <h2 id="explanation-heading">Explanation</h2>
+              <button type="button" class="button" id="edit">Edit text</button>
+            </div>
+            <div id="annotated" class="annotated"></div>
+            <label class="sr-only" for="explanation">Explanation text</label>
+            <textarea id="explanation" class="editor" rows="14" spellcheck="false" hidden></textarea>
+            <p class="hint" id="ground-truth" hidden></p>
+          </section>
+
+          <section class="panel" aria-labelledby="ledger-heading">
+            <div class="panel-head">
+              <h2 id="ledger-heading">Ledger</h2>
+              <div class="panel-actions">
+                <a class="button" id="download-csv" href="#" download>Download CSV</a>
+                <label class="button" for="upload-csv">Upload CSV</label>
+                <input type="file" id="upload-csv" accept=".csv,text/csv" class="sr-only">
+              </div>
+            </div>
+            <p class="hint" id="ledger-source"></p>
+            <div class="table-wrap">
+              <table class="data" id="variance">
+                <caption class="sr-only">Account balances by period</caption>
+                <thead><tr><th scope="col">Account</th><th scope="col" class="num" id="prior-head">Prior</th><th scope="col" class="num" id="current-head">Current</th><th scope="col" class="num">Change</th><th scope="col" class="num pct">%</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <div class="col">
+          <section class="panel" aria-labelledby="coverage-heading">
+            <div class="panel-head"><h2 id="coverage-heading">Coverage</h2></div>
+            <dl class="stats" id="coverage"></dl>
+          </section>
+
+          <section class="panel" aria-labelledby="claims-heading">
+            <div class="panel-head">
+              <h2 id="claims-heading">Claims</h2>
+              <div class="segmented" role="group" aria-label="Show">
+                <button type="button" class="seg" data-filter="exceptions" aria-pressed="true">Exceptions</button>
+                <button type="button" class="seg" data-filter="all" aria-pressed="false">All</button>
+              </div>
+            </div>
+            <ol class="claims" id="claims"></ol>
+            <div id="unextracted"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-benchmark" class="view" aria-labelledby="benchmark-heading" hidden>
+      <form class="toolbar" id="bench-form">
+        <h1 id="benchmark-heading" class="toolbar-title">Synthetic benchmark</h1>
+        <label class="field">
+          <span class="field-label">Split</span>
+          <select id="bench-split"><option value="test">test (held out)</option><option value="train">train</option></select>
+        </label>
+        <label class="field">
+          <span class="field-label">Closes</span>
+          <input id="bench-n" type="number" min="11" max="2000" step="11" value="440">
+        </label>
+        <button type="submit" class="button primary" id="bench-run">Run both phrasings</button>
+        <span class="run-meta" id="bench-meta"></span>
+      </form>
+      <div class="layout single">
+        <section class="panel">
+          <div class="panel-head"><h2>Summary</h2></div>
+          <p class="hint">Each close is generated with a known cause and, for defect families, exactly one injected error. <strong>Seen</strong> phrasing uses wording the lexicon covers; <strong>held-out</strong> phrasing describes the same causes in words it has never seen. The generator, lexicon and checker share an author, so these numbers are a consistency check, not evidence of accuracy on real commentary.</p>
+          <div class="table-wrap"><table class="data" id="bench-summary"></table></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>By family</h2>
+            <div class="segmented" role="group" aria-label="Phrasing">
+              <button type="button" class="seg" data-phrasing="seen" aria-pressed="true">Seen</button>
+              <button type="button" class="seg" data-phrasing="heldout" aria-pressed="false">Held-out</button>
+            </div>
+          </div>
+          <div class="table-wrap"><table class="data" id="bench-families"></table></div>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

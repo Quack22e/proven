@@ -1,0 +1,750 @@
+// @ts-check
+/**
+ * Proven reviewer console.
+ *
+ * Plain ES module, no build step, no dependencies: `python -m proven serve` is
+ * the whole toolchain a reviewer needs. Type-checked under `tsc --strict`
+ * through JSDoc (see tsconfig.json in this directory), so the API contract
+ * below is checked rather than assumed.
+ *
+ * The screen follows the reviewer's job: claim, source, reconstruction,
+ * verdict, reason — and one action. Every verdict, number and finding is
+ * computed by the server; this file formats and arranges, and decides nothing.
+ */
+
+/** @typedef {"PASS"|"FAIL"|"REVIEW"} Verdict */
+/** @typedef {{text: string, value: number, half_unit: number}} Figure */
+/** @typedef {{text: string, origin: string}} Term */
+/**
+ * @typedef {{claim_id: string, span: [number, number], quote: string, account: string|null,
+ *   account_origin: string|null, direction: string|null,
+ *   stated: {change: Figure|null, percent: Figure|null, prior: Figure|null, current: Figure|null},
+ *   driver: string|null, terms: Term[], strength: string, extractor: string, notes: string[]}} Claim
+ */
+/** @typedef {{name: string, ran: boolean, outcome: string, detail: string}} Check */
+/** @typedef {{code: string, severity: string, summary: string, detail: string, evidence: string[]}} Finding */
+/** @typedef {{id: string, term: string, origin: string, period: string, amount: number}} Match */
+/**
+ * @typedef {{matched: Match[], prior: number, current: number, change: number, share: number,
+ *   share_anchored: number, required_share: number, residual: number}} DriverRecon
+ */
+/** @typedef {{vendor: string, prior: number, current: number, change: number, txn_ids: string[]}} Mover */
+/**
+ * @typedef {{account?: string, prior?: number, current?: number, change?: number,
+ *   change_pct?: number|null, movers?: Mover[], driver?: DriverRecon, residual?: number|null,
+ *   reclassified_change?: number|null}} Recon
+ */
+/**
+ * @typedef {{claim: Claim, verdict: Verdict, computed_verdict: Verdict, reason: string,
+ *   checks: Check[], findings: Finding[], reconstruction: Recon, adjustments: string[]}} ClaimResult
+ */
+/** @typedef {{id: string, date: string, account: string, vendor: string, memo: string, amount: number}} Txn */
+/** @typedef {{account: string, prior: number, current: number, change: number, change_pct: number|null, total: boolean}} AccountRow */
+/**
+ * @typedef {{entity: string, prior_period: string, current_period: string, accounts: AccountRow[],
+ *   transaction_count: number, sha256: string}} LedgerSummary
+ */
+/**
+ * @typedef {{sentences: number, sentences_with_figures: number, claims: number, decided: number,
+ *   decided_share: number, verdicts: Record<string, number>, unextracted: number, rejected: number}} Coverage
+ */
+/** @typedef {{provider: string, model: string, bytes: number, sent: string[], not_sent: string[]}} Transmission */
+/**
+ * @typedef {{run_id: string, created_at: string, explanation_sha256: string, ledger_sha256: string,
+ *   versions: Record<string, string>, policy: Record<string, number>,
+ *   network: {allowed: boolean, transmissions: Transmission[]}}} RunInfo
+ */
+/**
+ * @typedef {{run: RunInfo, explanation: string, ledger: LedgerSummary, coverage: Coverage,
+ *   claims: ClaimResult[], unextracted: {start: number, end: number, text: string}[],
+ *   rejected: {quote: string, reason: string, extractor: string}[], transactions: Record<string, Txn>}} VerifyReport
+ */
+/** @typedef {{id: string, kind: string, title: string, family?: string}} ScenarioRef */
+/**
+ * @typedef {{quote: string, family: string, kind: string, requirement: string,
+ *   expected_codes: string[], culprits: string[], account: string}} GroundLabel
+ */
+/**
+ * @typedef {{id: string, title: string, explanation: string,
+ *   ground_truth: {family: string, requirement: string, labels: GroundLabel[]}|null}} Scenario
+ */
+/** @typedef {{id: string, label: string, help: string, reduces_review: boolean}} Action */
+/** @typedef {{id: string, label: string, available: boolean, reason: string}} ExtractorInfo */
+/**
+ * @typedef {{version: string, network: {allowed: boolean, guard_installed: boolean},
+ *   extractors: ExtractorInfo[], policy: Record<string, number>, actions: Action[]}} Config
+ */
+/**
+ * @typedef {{family: string, kind: string, requirement: string, expected_codes: string[], n: number,
+ *   met: number, met_rate: number, codes_rate: number|null, evidence_recall: number|null,
+ *   evidence_precision: number|null, verdicts: Record<string, number>, mean_reward: number}} FamilyRow
+ */
+/**
+ * @typedef {{split: string, phrasing: string, scenarios: number, claims: number, families: FamilyRow[],
+ *   controls: {n: number, passed: number, false_alarms: number, fails: number},
+ *   defects: {n: number, caught: number, flagged: number, unsafe_passes: number, missed: number},
+ *   coverage: {claims: number, decided: number, decided_share: number}, mean_reward: number}} Benchmark
+ */
+
+// ── DOM helpers ──────────────────────────────────────────────────────────
+
+/**
+ * @template {HTMLElement} T
+ * @param {string} id
+ * @returns {T}
+ */
+function byId(id) {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`missing element #${id}`);
+  return /** @type {T} */ (el);
+}
+
+/** @typedef {Node | string | number | null | undefined | false} Child */
+
+/**
+ * Create an element. Text children are inserted as text nodes, never as HTML,
+ * because the explanation and every memo shown here are user-supplied.
+ * @param {string} tag
+ * @param {Record<string, string | number | boolean | null | undefined | EventListener>} [attrs]
+ * @param {...(Child | Child[])} children
+ * @returns {HTMLElement}
+ */
+function h(tag, attrs = {}, ...children) {
+  const el = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value === null || value === undefined || value === false) continue;
+    if (typeof value === "function") el.addEventListener(key.slice(2), value);
+    else if (key === "class") el.className = String(value);
+    else if (value === true) el.setAttribute(key, "");
+    else el.setAttribute(key, String(value));
+  }
+  for (const child of children.flat()) {
+    if (child === null || child === undefined || child === false) continue;
+    el.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return el;
+}
+
+/** @param {Element} el @param {...(Child | Child[])} children */
+function replace(el, ...children) {
+  el.replaceChildren();
+  for (const child of children.flat()) {
+    if (child === null || child === undefined || child === false) continue;
+    el.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+}
+
+// ── formatting (presentation only; every number comes from the server) ──
+
+/** @param {number} value */
+const money = (value) =>
+  `${value < -0.005 ? "-" : ""}$${Math.abs(value).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+/** @param {number} value */
+const signed = (value) => `${value > 0.005 ? "+" : ""}${money(value)}`;
+/** @param {number | null | undefined} value */
+const points = (value) => (value === null || value === undefined ? "—" : `${value > 0 ? "+" : ""}${value.toFixed(1)}%`);
+/** @param {number} share */
+const share = (share) => `${Math.round(share * 100)}%`;
+/** @param {string} period */
+function monthLabel(period) {
+  const [year, month] = period.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+}
+/** @param {number} value */
+const rate = (value) => `${(value * 100).toFixed(1)}%`;
+
+const STRENGTH = { full: "the whole movement", majority: "most of the movement", partial: "part of the movement" };
+const ORIGIN = { quote: "written", lexicon: "lexicon", model: "model" };
+/** @type {Record<string, string>} */
+const OUTCOME_CLASS = {
+  agree: "good", supported: "good", clear: "good",
+  disagree: "bad", wrong_cause: "bad", partial: "bad",
+  near: "warn", not_found: "warn", weak_match: "warn", model_only: "warn", flagged: "warn",
+};
+const ORDER = { FAIL: 0, REVIEW: 1, PASS: 2 };
+
+// ── API ──────────────────────────────────────────────────────────────────
+
+/**
+ * @template T
+ * @param {string} path
+ * @param {object} [body]
+ * @returns {Promise<T>}
+ */
+async function api(path, body) {
+  const init = body === undefined ? {} : {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  };
+  let response;
+  try {
+    response = await fetch(path, init);
+  } catch {
+    throw new Error("The Proven server is not reachable. Is `python -m proven serve` still running?");
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+  return /** @type {T} */ (data);
+}
+
+// ── state ────────────────────────────────────────────────────────────────
+
+const state = {
+  /** @type {Config | null} */ config: null,
+  /** @type {ScenarioRef[]} */ scenarios: [],
+  /** @type {Scenario | null} */ scenario: null,
+  /** @type {VerifyReport | null} */ report: null,
+  /** @type {{name: string, text: string} | null} */ upload: null,
+  /** @type {"exceptions" | "all"} */ filter: "exceptions",
+  editing: false,
+  /** @type {string | null} */ active: null,
+  /** @type {Record<string, number>} */ openedAt: {},
+  /** @type {Record<string, string>} */ resolved: {},
+  /** @type {Record<string, Benchmark>} */ bench: {},
+  /** @type {"seen" | "heldout"} */ benchPhrasing: "seen",
+};
+
+const el = {
+  banner: byId("banner"),
+  status: byId("status"),
+  toolbar: /** @type {HTMLFormElement} */ (byId("toolbar")),
+  scenario: /** @type {HTMLSelectElement} */ (byId("scenario")),
+  extractor: /** @type {HTMLSelectElement} */ (byId("extractor")),
+  verify: /** @type {HTMLButtonElement} */ (byId("verify")),
+  runMeta: byId("run-meta"),
+  annotated: byId("annotated"),
+  editor: /** @type {HTMLTextAreaElement} */ (byId("explanation")),
+  edit: /** @type {HTMLButtonElement} */ (byId("edit")),
+  groundTruth: byId("ground-truth"),
+  download: /** @type {HTMLAnchorElement} */ (byId("download-csv")),
+  upload: /** @type {HTMLInputElement} */ (byId("upload-csv")),
+  ledgerSource: byId("ledger-source"),
+  variance: /** @type {HTMLTableElement} */ (byId("variance")),
+  priorHead: byId("prior-head"),
+  currentHead: byId("current-head"),
+  coverage: byId("coverage"),
+  claims: byId("claims"),
+  unextracted: byId("unextracted"),
+  benchForm: /** @type {HTMLFormElement} */ (byId("bench-form")),
+  benchSplit: /** @type {HTMLSelectElement} */ (byId("bench-split")),
+  benchN: /** @type {HTMLInputElement} */ (byId("bench-n")),
+  benchRun: /** @type {HTMLButtonElement} */ (byId("bench-run")),
+  benchMeta: byId("bench-meta"),
+  benchSummary: byId("bench-summary"),
+  benchFamilies: byId("bench-families"),
+};
+
+/** @param {string | null} message */
+function showError(message) {
+  el.banner.hidden = !message;
+  el.banner.textContent = message || "";
+}
+
+// ── review: loading and running ──────────────────────────────────────────
+
+async function loadScenario(/** @type {string} */ id) {
+  /** @type {Scenario} */
+  const scenario = await api(`/api/scenario?id=${encodeURIComponent(id)}`);
+  state.scenario = scenario;
+  state.upload = null;
+  state.resolved = {};
+  el.editor.value = scenario.explanation;
+  el.download.href = `/api/ledger.csv?id=${encodeURIComponent(id)}`;
+  el.download.setAttribute("download", `${id}-ledger.csv`);
+  const truth = scenario.ground_truth;
+  el.groundTruth.hidden = !truth;
+  if (truth) {
+    const target = truth.labels[0];
+    replace(el.groundTruth, h("strong", {}, "Ground truth (synthetic): "),
+      `${truth.family.replace(/_/g, " ")} — must ${truth.requirement === "NOT_PASS" ? "not pass" : truth.requirement.toLowerCase()}`,
+      target.culprits.length ? `; culprit transactions ${target.culprits.join(", ")}` : "",
+      `. The other ${truth.labels.length - 1} claim(s) are correct.`);
+  }
+  await verify();
+}
+
+async function verify() {
+  if (!state.scenario) return;
+  const body = {
+    explanation: el.editor.value,
+    extractor: el.extractor.value,
+    ...(state.upload ? { ledger_csv: state.upload.text, entity: state.upload.name } : { scenario_id: state.scenario.id }),
+  };
+  el.verify.disabled = true;
+  el.verify.textContent = "Verifying…";
+  document.body.classList.add("loading");
+  const started = performance.now();
+  try {
+    state.report = await api("/api/verify", body);
+    // Resolutions belong to a run; claim ids are re-issued by every run.
+    state.resolved = {};
+    state.openedAt = {};
+    state.active = null;
+    setEditing(false);
+    showError(null);
+    render(performance.now() - started);
+  } catch (error) {
+    showError(error instanceof Error ? error.message : String(error));
+  } finally {
+    el.verify.disabled = false;
+    el.verify.textContent = "Verify";
+    document.body.classList.remove("loading");
+  }
+}
+
+/** @param {boolean} editing */
+function setEditing(editing) {
+  state.editing = editing;
+  el.editor.hidden = !editing;
+  el.annotated.hidden = editing;
+  el.edit.textContent = editing ? "Show checked text" : "Edit text";
+  if (editing) el.editor.focus();
+}
+
+// ── review: rendering ────────────────────────────────────────────────────
+
+/** @param {number} elapsed */
+function render(elapsed) {
+  const report = state.report;
+  if (!report) return;
+  const run = report.run;
+  const sent = run.network.transmissions;
+  replace(el.runMeta,
+    `Run ${run.run_id} · ${run.versions.extractor} · verifier ${run.versions.verifier} · ${Math.round(elapsed)} ms`,
+    sent.length
+      ? ` · sent ${sent.reduce((n, t) => n + t.bytes, 0).toLocaleString()} bytes to ${sent[0].provider} (${sent[0].sent.join(", ")}; no transactions)`
+      : " · nothing left this machine");
+  renderAnnotated(report);
+  renderLedger(report);
+  renderCoverage(report.coverage);
+  renderClaims(report);
+  renderUnextracted(report);
+}
+
+/** @param {VerifyReport} report */
+function renderAnnotated(report) {
+  const text = report.explanation;
+  /** @type {{start: number, end: number, node: (inner: string) => HTMLElement}[]} */
+  const spans = [];
+  for (const result of report.claims) {
+    const [start, end] = result.claim.span;
+    const id = result.claim.claim_id;
+    spans.push({ start, end, node: (inner) => h("mark", {
+      class: `v-${result.verdict}${state.active === id ? " active" : ""}`,
+      "data-claim": id, tabindex: 0, role: "button",
+      "aria-label": `${id}: ${result.verdict}. ${result.reason}`,
+      onclick: () => focusClaim(id),
+      onkeydown: (/** @type {Event} */ e) => { if (/** @type {KeyboardEvent} */ (e).key === "Enter") focusClaim(id); },
+    }, inner, h("sup", {}, id)) });
+  }
+  for (const missed of report.unextracted) {
+    spans.push({ start: missed.start, end: missed.end, node: (inner) =>
+      h("span", { class: "unextracted", title: "States a figure, but no checkable claim was extracted" }, inner) });
+  }
+  spans.sort((a, b) => a.start - b.start);
+  /** @type {Child[]} */
+  const parts = [];
+  let cursor = 0;
+  for (const span of spans) {
+    if (span.start < cursor) continue;
+    parts.push(text.slice(cursor, span.start), span.node(text.slice(span.start, span.end)));
+    cursor = span.end;
+  }
+  parts.push(text.slice(cursor));
+  replace(el.annotated, ...parts);
+}
+
+/** @param {VerifyReport} report */
+function renderLedger(report) {
+  const ledger = report.ledger;
+  el.priorHead.textContent = monthLabel(ledger.prior_period);
+  el.currentHead.textContent = monthLabel(ledger.current_period);
+  const activeAccount = state.active
+    ? report.claims.find((c) => c.claim.claim_id === state.active)?.claim.account
+    : null;
+  replace(el.ledgerSource,
+    `${ledger.entity} · ${ledger.transaction_count} transactions · sha256 ${ledger.sha256.slice(0, 12)}`,
+    state.upload ? h("span", {}, ` · uploaded: ${state.upload.name} `,
+      h("button", { type: "button", class: "button small", onclick: () => { state.upload = null; el.upload.value = ""; verify(); } }, "Use scenario ledger")) : "");
+  const rows = ledger.accounts.map((row) => h("tr", {
+    class: [row.total ? "total" : "", row.account === activeAccount ? "highlight" : ""].join(" ").trim() || null,
+  },
+  h("th", { scope: "row", class: "wrap" }, row.account),
+  h("td", { class: "num" }, money(row.prior)),
+  h("td", { class: "num" }, money(row.current)),
+  h("td", { class: `num${row.change < 0 ? " neg" : ""}` }, signed(row.change)),
+  h("td", { class: "num muted pct" }, points(row.change_pct))));
+  replace(el.variance.tBodies[0], ...rows);
+}
+
+/** @param {Coverage} coverage */
+function renderCoverage(coverage) {
+  /** @param {string} label @param {Child} value @param {Child} [sub] */
+  const stat = (label, value, sub) => h("div", {}, h("dt", {}, label), h("dd", {}, value, sub ? h("small", {}, sub) : null));
+  replace(el.coverage,
+    stat("Claims checked", coverage.claims, `of ${coverage.sentences_with_figures} with figures`),
+    stat("Decided", rate(coverage.decided_share), `${coverage.decided} of ${coverage.claims}`),
+    stat("Pass · Fail", `${coverage.verdicts.PASS} · ${coverage.verdicts.FAIL}`),
+    stat("Need review", coverage.verdicts.REVIEW, coverage.unextracted ? `+${coverage.unextracted} not extracted` : ""));
+}
+
+/** @param {VerifyReport} report */
+function renderClaims(report) {
+  for (const button of document.querySelectorAll("[data-filter]")) {
+    button.setAttribute("aria-pressed", String(button.getAttribute("data-filter") === state.filter));
+  }
+  let claims = report.claims.slice();
+  if (state.filter === "exceptions") {
+    claims = claims.filter((c) => c.verdict !== "PASS").sort((a, b) => ORDER[a.verdict] - ORDER[b.verdict]);
+  }
+  if (!report.claims.length) {
+    replace(el.claims, h("li", { class: "empty" },
+      "No claims were extracted. A checkable sentence names an account and states a change, a percentage or a balance."));
+    return;
+  }
+  if (!claims.length) {
+    replace(el.claims, h("li", { class: "empty" }, `No exceptions: all ${report.claims.length} claims passed.`));
+    return;
+  }
+  const firstOpen = state.active || claims[0].claim.claim_id;
+  replace(el.claims, ...claims.map((result) => claimItem(result, report, result.claim.claim_id === firstOpen && result.verdict !== "PASS" || result.claim.claim_id === state.active)));
+}
+
+/**
+ * @param {ClaimResult} result
+ * @param {VerifyReport} report
+ * @param {boolean} open
+ */
+function claimItem(result, report, open) {
+  const claim = result.claim;
+  const id = claim.claim_id;
+  const details = /** @type {HTMLDetailsElement} */ (h("details", { open },
+    h("summary", {},
+      h("span", { class: `verdict v-${result.verdict}` }, result.verdict),
+      h("span", { class: "claim-quote" }, h("span", { class: "claim-id" }, id), claim.quote),
+      h("span", { class: "claim-reason" }, result.reason, state.resolved[id] ? h("span", { class: "muted" }, ` · resolved: ${state.resolved[id]}`) : null)),
+    h("div", { class: "claim-body" },
+      reconstruction(result, report),
+      checksSection(result.checks),
+      findingsSection(result, report),
+      moversSection(result, report),
+      notesSection(result),
+      resolveSection(result, report))));
+  if (open) state.openedAt[id] = state.openedAt[id] || Date.now();
+  details.addEventListener("toggle", () => {
+    if (details.open) state.openedAt[id] = Date.now();
+  });
+  return h("li", { class: `claim${state.active === id ? " active" : ""}`, id: `claim-${id}` }, details);
+}
+
+/** @param {ClaimResult} result @param {VerifyReport} report */
+function reconstruction(result, report) {
+  const claim = result.claim;
+  const recon = result.reconstruction;
+  const ledger = report.ledger;
+  /** @type {Child[]} */
+  const rows = [];
+  /** @param {string} key @param {...Child} value */
+  const row = (key, ...value) => rows.push(h("dt", {}, key), h("dd", {}, ...value));
+
+  row("Account", claim.account || "not identified", claim.account_origin === "model" ? h("span", { class: "muted" }, " · mapped by the model") : "");
+  if (recon.change !== undefined && recon.prior !== undefined && recon.current !== undefined) {
+    row("Ledger", h("span", { class: "mono" },
+      `${monthLabel(ledger.prior_period)} ${money(recon.prior)} → ${monthLabel(ledger.current_period)} ${money(recon.current)} · ${signed(recon.change)} (${points(recon.change_pct)})`));
+  }
+  const stated = [
+    claim.direction ? (claim.direction === "up" ? "rose" : "fell") : null,
+    claim.stated.change ? `change ${claim.stated.change.text}` : null,
+    claim.stated.percent ? `${claim.stated.percent.text}` : null,
+    claim.stated.current ? `to ${claim.stated.current.text}` : null,
+    claim.stated.prior ? `from ${claim.stated.prior.text}` : null,
+  ].filter(Boolean).join(", ");
+  row("Stated", stated || "no figure");
+  if (claim.driver) {
+    row("Reason", `“${claim.driver}” — claims ${STRENGTH[/** @type {keyof typeof STRENGTH} */ (claim.strength)] || claim.strength}`);
+    /** @type {Record<string, string[]>} */
+    const groups = {};
+    for (const term of claim.terms) (groups[term.origin] = groups[term.origin] || []).push(term.text);
+    row("Searched", Object.keys(groups).length
+      ? Object.entries(groups).map(([origin, words]) => `${words.join(", ")} (${ORIGIN[/** @type {keyof typeof ORIGIN} */ (origin)] || origin})`).join("; ")
+      : "no searchable words");
+    const driver = recon.driver;
+    if (driver && recon.change) {
+      row("Matched", h("span", { class: "mono" },
+        `${driver.matched.length} txn · ${signed(driver.change)} of ${signed(recon.change)} = ${share(driver.share)}`),
+        ` (needs ${share(driver.required_share)})`);
+    }
+  } else {
+    row("Reason", h("span", { class: "muted" }, "none stated"));
+  }
+  if (recon.reclassified_change !== null && recon.reclassified_change !== undefined) {
+    row("If reclassified", h("span", { class: "mono" }, signed(recon.reclassified_change)));
+  }
+  return h("section", { class: "claim-section" }, h("h3", {}, "Reconstruction"), h("dl", { class: "kv" }, ...rows));
+}
+
+/** @param {Check[]} checks */
+function checksSection(checks) {
+  return h("section", { class: "claim-section" }, h("h3", {}, "Checks"),
+    h("ul", { class: "checks" }, ...checks.map((check) => h("li", { class: check.ran ? null : "skipped" },
+      h("span", {}, check.name),
+      h("span", { class: `outcome ${OUTCOME_CLASS[check.outcome] || ""}` }, check.ran ? check.outcome.replace(/_/g, " ") : "skipped"),
+      h("span", {}, check.detail)))));
+}
+
+/** @param {ClaimResult} result @param {VerifyReport} report */
+function findingsSection(result, report) {
+  if (!result.findings.length) return null;
+  return h("section", { class: "claim-section" }, h("h3", {}, "Findings"),
+    ...result.findings.map((finding) => h("div", { class: `finding ${finding.severity}` },
+      h("span", { class: "finding-code" }, `${finding.code} · ${finding.severity}`),
+      h("p", { class: "finding-summary" }, finding.summary),
+      h("p", { class: "finding-detail" }, finding.detail),
+      finding.evidence.length ? txnTable(finding.evidence.map((id) => report.transactions[id]).filter(Boolean), result.claim.account) : null)));
+}
+
+/** @param {Txn[]} txns @param {string | null} account */
+function txnTable(txns, account) {
+  return h("div", { class: "table-wrap" }, h("table", { class: "data" },
+    h("thead", {}, h("tr", {}, ...["ID", "Date", "Account", "Vendor", "Memo", "Amount"].map((label, i) =>
+      h("th", { scope: "col", class: i === 5 ? "num" : null }, label)))),
+    h("tbody", {}, ...txns.map((txn) => h("tr", {},
+      h("td", { class: "mono nowrap" }, txn.id),
+      h("td", { class: "mono nowrap" }, txn.date),
+      h("td", { class: "wrap" }, txn.account, account && txn.account !== account && account !== "Total operating expenses" ? h("span", { class: "muted" }, " (other account)") : ""),
+      h("td", { class: "wrap" }, txn.vendor),
+      h("td", { class: "wrap" }, txn.memo),
+      h("td", { class: "num" }, money(txn.amount)))))));
+}
+
+/** @param {ClaimResult} result @param {VerifyReport} report */
+function moversSection(result, report) {
+  const movers = (result.reconstruction.movers || []).filter((m) => Math.abs(m.change) >= 1);
+  if (!movers.length) return null;
+  return h("section", { class: "claim-section" }, h("h3", {}, `Largest movements in ${result.claim.account}`),
+    h("div", { class: "table-wrap" }, h("table", { class: "data" },
+      h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "Vendor"),
+        h("th", { scope: "col", class: "num" }, monthLabel(report.ledger.prior_period)),
+        h("th", { scope: "col", class: "num" }, monthLabel(report.ledger.current_period)),
+        h("th", { scope: "col", class: "num" }, "Change"))),
+      h("tbody", {}, ...movers.slice(0, 5).map((m) => h("tr", {},
+        h("td", { class: "wrap" }, m.vendor),
+        h("td", { class: "num" }, money(m.prior)),
+        h("td", { class: "num" }, money(m.current)),
+        h("td", { class: `num${m.change < 0 ? " neg" : ""}` }, signed(m.change))))))));
+}
+
+/** @param {ClaimResult} result */
+function notesSection(result) {
+  const notes = [...result.adjustments, ...result.claim.notes];
+  if (!notes.length) return null;
+  return h("section", { class: "claim-section" }, h("h3", {}, "Adjustments and notes"),
+    h("ul", { class: "unextracted-list" }, ...notes.map((n) => h("li", {}, n))));
+}
+
+/** @param {ClaimResult} result @param {VerifyReport} report */
+function resolveSection(result, report) {
+  if (result.verdict === "PASS" || !state.config) return null;
+  const id = result.claim.claim_id;
+  const select = /** @type {HTMLSelectElement} */ (h("select", { "aria-label": "Resolution" },
+    ...state.config.actions.map((a) => h("option", { value: a.id, title: a.help }, a.label))));
+  const note = /** @type {HTMLTextAreaElement} */ (h("textarea", { "aria-label": "Reason for the resolution", placeholder: "Why? (required)", rows: 1 }));
+  const status = h("p", { class: "resolve-status", "aria-live": "polite" }, state.resolved[id] ? `Recorded: ${state.resolved[id]}` : (state.config.actions[0].help));
+  select.addEventListener("change", () => {
+    const action = state.config?.actions.find((a) => a.id === select.value);
+    status.className = "resolve-status";
+    status.textContent = action ? action.help : "";
+  });
+  const button = /** @type {HTMLButtonElement} */ (h("button", { type: "submit", class: "button" }, "Record"));
+  const form = h("form", { class: "resolve" }, select, note, button, status);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    button.disabled = true;
+    try {
+      const opened = state.openedAt[id];
+      await api("/api/resolutions", {
+        run_id: report.run.run_id, claim_id: id, quote: result.claim.quote, verdict: result.verdict,
+        action: select.value, note: note.value,
+        seconds_on_claim: opened ? Math.round((Date.now() - opened) / 1000) : null,
+      });
+      const label = select.options[select.selectedIndex].text;
+      state.resolved[id] = label;
+      status.className = "resolve-status ok";
+      status.textContent = `Recorded: ${label}, appended to the resolutions log.`;
+    } catch (error) {
+      status.className = "resolve-status err";
+      status.textContent = error instanceof Error ? error.message : String(error);
+    } finally {
+      button.disabled = false;
+    }
+  });
+  return h("section", { class: "claim-section" }, h("h3", {}, "Resolve"), form);
+}
+
+/** @param {VerifyReport} report */
+function renderUnextracted(report) {
+  /** @type {Child[]} */
+  const parts = [];
+  if (report.unextracted.length) {
+    parts.push(h("h3", {}, "Not extracted"),
+      h("p", { class: "hint" }, "These sentences state a figure but yielded no checkable claim. They are counted, not hidden."),
+      h("ul", { class: "unextracted-list" }, ...report.unextracted.map((s) => h("li", {}, s.text))));
+  }
+  if (report.rejected.length) {
+    parts.push(h("h3", {}, "Rejected proposals"),
+      h("p", { class: "hint" }, "The extractor proposed these, and the text did not support them."),
+      h("ul", { class: "unextracted-list" }, ...report.rejected.map((r) => h("li", {}, `${r.reason.replace(/_/g, " ")}: ${r.quote}`))));
+  }
+  replace(el.unextracted, parts.length ? h("div", { class: "claim-section" }, ...parts) : null);
+}
+
+/** @param {string} id */
+function focusClaim(id) {
+  const report = state.report;
+  if (!report) return;
+  const result = report.claims.find((c) => c.claim.claim_id === id);
+  if (result && result.verdict === "PASS") state.filter = "all";
+  state.active = id;
+  renderAnnotated(report);
+  renderLedger(report);
+  renderClaims(report);
+  document.getElementById(`claim-${id}`)?.scrollIntoView({ block: "nearest" });
+}
+
+// ── benchmark ────────────────────────────────────────────────────────────
+
+async function runBenchmark() {
+  const n = Math.max(11, Math.min(2000, Number(el.benchN.value) || 440));
+  el.benchRun.disabled = true;
+  try {
+    for (const phrasing of /** @type {const} */ (["seen", "heldout"])) {
+      el.benchMeta.textContent = `Running ${n} ${el.benchSplit.value} closes, ${phrasing === "seen" ? "seen" : "held-out"} phrasing…`;
+      const started = performance.now();
+      state.bench[phrasing] = await api("/api/benchmark", { split: el.benchSplit.value, n, phrasing });
+      el.benchMeta.textContent = `${phrasing} done in ${Math.round(performance.now() - started)} ms`;
+      renderBenchmark();
+    }
+    const seen = state.bench.seen;
+    el.benchMeta.textContent = `${seen.scenarios} closes · ${seen.claims} claims per phrasing · split ${seen.split}`;
+    showError(null);
+  } catch (error) {
+    showError(error instanceof Error ? error.message : String(error));
+  } finally {
+    el.benchRun.disabled = false;
+  }
+}
+
+function renderBenchmark() {
+  const columns = /** @type {const} */ (["seen", "heldout"]);
+  /** @type {[string, (b: Benchmark) => Child, string][]} */
+  const metrics = [
+    ["Controls passed", (b) => `${b.controls.passed} / ${b.controls.n}`, "correct explanations left alone"],
+    ["Controls failed", (b) => b.controls.fails, "must be 0 — a FAIL on correct work"],
+    ["Defects flagged", (b) => `${b.defects.flagged} / ${b.defects.n}`, "not passed: FAIL or REVIEW"],
+    ["Defects meeting requirement", (b) => `${b.defects.caught} / ${b.defects.n}`, "FAIL where the family requires FAIL"],
+    ["Unsafe PASS", (b) => b.defects.unsafe_passes, "must be 0 — a PASS on wrong work"],
+    ["Decided without a person", (b) => rate(b.coverage.decided_share), "coverage, reported separately"],
+    ["Mean reward", (b) => b.mean_reward.toFixed(3), "the training signal, in [-1, 1]"],
+  ];
+  replace(el.benchSummary,
+    h("thead", {}, h("tr", {}, h("th", { scope: "col" }, "Measure"),
+      ...columns.map((c) => h("th", { scope: "col", class: "num" }, c === "seen" ? "Seen phrasing" : "Held-out phrasing")),
+      h("th", { scope: "col" }, "Meaning"))),
+    h("tbody", {}, ...metrics.map(([label, get, meaning]) => h("tr", {},
+      h("th", { scope: "row" }, label),
+      ...columns.map((c) => h("td", { class: "num" }, state.bench[c] ? get(state.bench[c]) : "—")),
+      h("td", { class: "muted wrap" }, meaning)))));
+
+  for (const button of document.querySelectorAll("[data-phrasing]")) {
+    button.setAttribute("aria-pressed", String(button.getAttribute("data-phrasing") === state.benchPhrasing));
+  }
+  const bench = state.bench[state.benchPhrasing];
+  if (!bench) {
+    replace(el.benchFamilies, h("tbody", {}, h("tr", {}, h("td", { class: "empty" }, "Run the benchmark to see per-family results."))));
+    return;
+  }
+  /** @param {number | null} v */
+  const opt = (v) => (v === null ? "—" : rate(v));
+  replace(el.benchFamilies,
+    h("thead", {}, h("tr", {}, ...["Family", "Type", "Requirement", "n", "Met", "Finding raised", "Evidence recall", "PASS", "FAIL", "REVIEW"]
+      .map((label, i) => h("th", { scope: "col", class: i >= 3 ? "num" : null }, label)))),
+    h("tbody", {}, ...bench.families.map((row) => h("tr", {},
+      h("th", { scope: "row", class: "mono" }, row.family),
+      h("td", {}, row.kind),
+      h("td", {}, row.requirement === "NOT_PASS" ? "not PASS" : row.requirement),
+      h("td", { class: "num" }, row.n),
+      h("td", { class: `num${row.met_rate < 0.9 ? " neg" : ""}` }, rate(row.met_rate)),
+      h("td", { class: "num" }, opt(row.codes_rate)),
+      h("td", { class: "num" }, opt(row.evidence_recall)),
+      h("td", { class: "num" }, row.verdicts.PASS),
+      h("td", { class: "num" }, row.verdicts.FAIL),
+      h("td", { class: "num" }, row.verdicts.REVIEW)))));
+}
+
+// ── views and wiring ─────────────────────────────────────────────────────
+
+/** @param {string} view */
+function showView(view) {
+  for (const tab of document.querySelectorAll(".tab")) {
+    if (tab.getAttribute("data-view") === view) tab.setAttribute("aria-current", "page");
+    else tab.removeAttribute("aria-current");
+  }
+  byId("view-review").hidden = view !== "review";
+  byId("view-benchmark").hidden = view !== "benchmark";
+  document.title = `Proven · ${view === "review" ? "Review" : "Benchmark"}`;
+  if (view === "benchmark" && !state.bench.seen) runBenchmark();
+}
+
+function wire() {
+  el.toolbar.addEventListener("submit", (e) => { e.preventDefault(); verify(); });
+  el.scenario.addEventListener("change", () => loadScenario(el.scenario.value).catch((e) => showError(String(e.message || e))));
+  el.edit.addEventListener("click", () => setEditing(!state.editing));
+  el.editor.addEventListener("keydown", (e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") verify(); });
+  el.upload.addEventListener("change", async () => {
+    const file = el.upload.files && el.upload.files[0];
+    if (!file) return;
+    state.upload = { name: file.name, text: await file.text() };
+    verify();
+  });
+  for (const button of document.querySelectorAll("[data-filter]")) {
+    button.addEventListener("click", () => {
+      state.filter = button.getAttribute("data-filter") === "all" ? "all" : "exceptions";
+      if (state.report) renderClaims(state.report);
+    });
+  }
+  for (const tab of document.querySelectorAll(".tab")) {
+    tab.addEventListener("click", () => showView(tab.getAttribute("data-view") || "review"));
+  }
+  el.benchForm.addEventListener("submit", (e) => { e.preventDefault(); runBenchmark(); });
+  for (const button of document.querySelectorAll("[data-phrasing]")) {
+    button.addEventListener("click", () => {
+      state.benchPhrasing = button.getAttribute("data-phrasing") === "heldout" ? "heldout" : "seen";
+      renderBenchmark();
+    });
+  }
+}
+
+async function init() {
+  wire();
+  try {
+    const [config, list] = await Promise.all([
+      api("/api/config").then((c) => /** @type {Config} */ (c)),
+      api("/api/scenarios").then((s) => /** @type {{scenarios: ScenarioRef[]}} */ (s)),
+    ]);
+    state.config = config;
+    state.scenarios = list.scenarios;
+    replace(el.status,
+      "Network ", h("strong", {}, config.network.allowed ? "allowed" : "off"),
+      config.network.guard_installed ? " (enforced)" : "", ` · v${config.version}`);
+    replace(el.extractor, ...config.extractors.map((x) =>
+      h("option", { value: x.id, disabled: !x.available, title: x.reason || null }, x.available ? x.label : `${x.label} — unavailable`)));
+    replace(el.scenario,
+      h("optgroup", { label: "Showcase" }, ...list.scenarios.filter((s) => s.kind === "showcase").map((s) => h("option", { value: s.id }, s.title))),
+      h("optgroup", { label: "Synthetic, held-out split" }, ...list.scenarios.filter((s) => s.kind !== "showcase").map((s) => h("option", { value: s.id }, `${s.title} (${s.id})`))));
+    renderBenchmark();
+    await loadScenario(list.scenarios[0].id);
+  } catch (error) {
+    showError(error instanceof Error ? error.message : String(error));
+  }
+}
+
+init();
