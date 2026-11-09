@@ -19,88 +19,192 @@ infrastructure), Aarnav Bhat (ML / RL architecture), Arun Yama.
 
 ![The review console on the demo close](docs/review.png)
 
----
-
-## Run it
-
-Python 3.10+ and nothing else: no packages, no build step, no API key.
-
-Optionally, `pip install .` installs the same commands as `proven` (`proven serve`, `proven showcase`, ...).
-
-```bash
-python -m proven serve
-```
-
-Open <http://127.0.0.1:8765>. The network is **off** and enforced (see *Data handling*). From the
-repository root:
-
-```bash
-python -m proven showcase
-```
-
-```bash
-python -m proven benchmark --n 440
-```
-
-```bash
-python -m proven verify --ledger my_gl_export.csv --explanation commentary.txt
-```
-
-```bash
-python -m proven generate --split train --n 5000 --out train.jsonl
-```
-
-```bash
-python -m pytest proven/tests -q
-```
-
-A ledger CSV needs the columns `id, date, account, vendor, memo, amount`. The two most recent
-months become the prior and current periods. The console's **Download CSV** button gives you a
-template, and **Upload CSV** checks any explanation against your own export.
-
-The optional Claude extractor needs `pip install anthropic` and an API key, and must be enabled
-explicitly with `python -m proven serve --allow-network`.
-
-### Hosted on Vercel
-
-The repository deploys to Vercel as it is: import it at <https://vercel.com/new> and press
-Deploy, with no settings to change. `vercel.json` copies the console's three static files into
-`public/`, where Vercel serves them from its CDN. Every `/api/*` request goes to one Python
-function, `api/index.py`, which reuses the same request handler as `python -m proven serve`.
-
-Two things differ from running locally:
-
-- **Resolutions are temporary.** They are written under `/tmp`, the only writable path on
-  Vercel, so they last only as long as the function instance. Run locally to keep them.
-- **The network guard is not installed.** Vercel's runtime talks to its host process over a
-  Unix socket, which the guard would refuse. The hosted demo still makes no outbound calls: the
-  Claude extractor refuses to run unless the process explicitly allowed the network, and this one
-  does not.
+**Contents:** [Try it](#try-it) · [How to review on the website](#how-to-review-on-the-website) ·
+[How it works](#how-it-works) · [The decisions behind it](#the-decisions-behind-it) ·
+[Results](#results) · [The RL plan](#the-rl-plan-and-what-exists-today) ·
+[Running and deploying](#running-and-deploying) · [Layout and API](#layout-and-api)
 
 ---
 
-## A three-minute demo
+## Try it
 
-1. **The showcase close** (Lumen Robotics, October 2026) loads and verifies on open. The
-   AI-drafted commentary has nine claims: **4 PASS, 3 FAIL, 2 REVIEW**, plus one sentence with a
-   figure that could not be checked. That sentence is listed, not hidden.
-2. **Exceptions first.** Each claim opens to the same layout: what was claimed; the
-   reconstruction from the ledger; which checks ran; the findings with their evidence
-   transactions; and one resolve action.
-   - **Legal**: wrong amount, explained by a misbooked invoice (above).
-   - **Marketing** (+$67K, "driven by the DevSummit sponsorship"): the amount is right, but
-     DevSummit is 33% of it. The rest is that same misbooked legal invoice, flagged from this side
-     too.
-   - **Contractors** (+$22K, "due to the website redesign"): the redesign cost $11,000 in both
-     months, so it moved $0. The increase is a $22,300 mobile-app contract.
-   - **Travel** (−$12K, "fewer customer visits"): no transaction mentions customer visits, so it
-     goes to **REVIEW**, not FAIL, with September's company offsite shown as the actual mover.
-3. **Click any sentence** in the explanation to jump to its claim. **Edit the text**: change
-   "$90K" to "$45K" and verify again. Legal turns to REVIEW, because the amount now matches the
-   books but the misbooked invoice is still there.
-4. **Synthetic closes** in the selector each carry one injected defect, with the ground truth
-   shown beneath the text.
-5. **Benchmark tab**: 440 held-out closes, both phrasings, in a few seconds. Details below.
+- **Online.** The hosted demo on Vercel needs nothing installed and opens on the demo close.
+- **On your machine.** Python 3.10+ and nothing else: no packages, no build step, no API key.
+  From the repository root:
+
+  ```bash
+  python -m proven serve
+  ```
+
+  Then open <http://127.0.0.1:8765>.
+
+The hosted and local versions run the same checks on the same data. The differences are listed
+under [Running and deploying](#running-and-deploying).
+
+---
+
+## How to review on the website
+
+The console is built for one job: a reviewer deciding the exceptions in an explanation, with the
+claim, the ledger evidence, the reconstruction, the verdict and the reason on one screen.
+
+### The screen at a glance
+
+| Area | What it shows |
+|---|---|
+| **Top bar** | The **Review** and **Benchmark** tabs. On the right, the network status ("Network off") and the version. |
+| **Toolbar** | **Close**: which month-end close to check (the showcase, or a synthetic close). **Extractor**: how sentences are read ("Rules (offline)"; the Claude option shows as unavailable unless enabled). **Verify** re-runs the check. Beside it: the run ID, the extractor and verifier versions, the time taken, and "nothing left this machine". |
+| **Explanation** (left) | The commentary being checked. Each checked sentence is underlined in its verdict's colour and tagged with its claim number (C1, C2, …). A dashed underline marks a sentence that states a figure but could not be checked. Click any underlined sentence to open its claim. |
+| **Ledger** (left) | Every account's balance in the prior and current month, the change and the % change, plus a total row. The account of the claim you selected is highlighted. Above it: the company, the transaction count and the ledger's fingerprint (sha256). |
+| **Coverage** (right) | **Claims checked** (out of sentences with figures), **Decided** (the share that reached PASS or FAIL without a person), **Pass · Fail**, and **Need review** (with any sentences not extracted). |
+| **Claims** (right) | One card per claim. **Exceptions** (the default) shows FAIL cards first, then REVIEW; **All** adds the passes. Below the cards: sentences that were not extracted, and any proposals the extractor made that the text did not support. |
+
+On a laptop, the left column stays in view while you scroll the claims, so the source is always
+beside the claim you are reading.
+
+### Reviewing a close, step by step
+
+1. **Choose a close and let it run.** The page checks the selected close as soon as it loads. To
+   check another, pick it under **Close**; it verifies automatically.
+2. **Read Coverage before the verdicts.** It tells you how much of the explanation was actually
+   checked. On the showcase: 9 claims out of 10 sentences with figures, 7 decided (77.8%),
+   4 pass · 3 fail, 2 need review, and 1 sentence not extracted.
+3. **Work through the exceptions.** The Claims list opens on **Exceptions**, FAILs first, with
+   the first one expanded. Each card's header shows the verdict, the sentence and a one-line
+   reason. Click a header to open or close it.
+4. **Read an open card top to bottom.** It always has the same sections:
+   - **Reconstruction**: what the sentence claimed beside what the ledger shows (row by row
+     below).
+   - **Checks**: each check that ran, with its outcome, and the ones that were skipped and why.
+   - **Findings**: what is wrong or uncertain, with a table of the evidence transactions (ID,
+     date, account, vendor, memo, amount). A transaction booked outside the claim's account is
+     marked "(other account)".
+   - **Largest movements in** the account: which vendors moved it, by how much.
+   - **Adjustments and notes**: anything the guards changed, and anything the reading dropped.
+   - **Resolve**: your decision (FAIL and REVIEW cards only).
+5. **Check the evidence against the source.** The transaction IDs in a finding are real rows of
+   the ledger. The highlighted row in the Ledger table is the account the claim is about.
+   Clicking a sentence in the explanation jumps to its card, and clicking a PASS sentence
+   switches the list to **All** so you can audit it.
+6. **Record a decision.** In **Resolve**, choose what is true, write *why* (at least 10
+   characters; a decision nobody can re-read cannot become a test), and press **Record**. The
+   section confirms "Recorded: …". The time you spent on the claim is recorded with it.
+7. **Change the inputs and re-check.** **Edit text** turns the explanation into an editable box;
+   change a figure or a reason, then press **Verify** (or Ctrl/Cmd+Enter). **Show checked text**
+   returns to the underlined view. **Upload CSV** checks the explanation against your own ledger
+   export, **Use scenario ledger** switches back, and **Download CSV** gives you the selected
+   close's ledger, which doubles as a template for the format.
+
+### What each verdict asks of you
+
+| Verdict | Means | What to do |
+|---|---|---|
+| **PASS** | Every check that ran agrees with the ledger, and at least one check ran. | Nothing. Audit a few with **All** if you like. |
+| **FAIL** | The ledger contradicts the sentence: wrong amount or direction, a cause that did not move, or a cause that explains less than the wording claims. | Confirm it, or record why Proven is wrong. |
+| **REVIEW** | The ledger cannot settle it: the cause was not found, the match is weak, an expense may be misbooked, or the amount is close but outside tolerance. | Look at the evidence and decide. |
+
+Underline colours follow the verdict (green PASS, red FAIL, amber REVIEW). The verdict is always
+also written out in text, so nothing relies on colour alone.
+
+### The Reconstruction rows
+
+| Row | Shows |
+|---|---|
+| **Account** | The account the sentence is about. "mapped by the model" means no alias in the sentence named it, so the claim cannot be decided without you. |
+| **Ledger** | Prior balance → current balance, the change and the % change. |
+| **Stated** | What the sentence claims: rose/fell, the change, a percentage, "to" a balance, "from" a balance. |
+| **Reason** | The stated cause, and how much of the movement the wording claims for it: "the whole movement" (*because of*, *due to*), "most of the movement" (*primarily*) or "part of the movement" (*partly*). |
+| **Searched** | The words looked for in vendor names and memos, labelled by origin: *written* (in the sentence), *lexicon* (declared synonyms) or *model* (proposed by the Claude extractor). |
+| **Matched** | How many transactions matched, how much they moved, and what share of the account's change that is, against the share the wording needs (75% for *because of*, 50% for *primarily*, 10% for *partly*). |
+| **If reclassified** | The account's change if the possibly misbooked expenses were moved back. |
+
+### The Checks list
+
+| Check | Outcomes |
+|---|---|
+| **direction** | *agree* / *disagree* |
+| **change**, **percent**, **current**, **prior** | *agree* (within 5%, or within the precision the figure was written to) / *near* (5–10% off: REVIEW) / *disagree* (more than 10% off: FAIL) |
+| **attribution** | *supported* / *partial* / *wrong cause* / *not found* / *weak match* / *model only* |
+| **classification** | *clear* / *flagged* |
+
+A check shown as *skipped* did not run, with the reason beside it: for example "no percent
+stated", or a movement below the $1,000 materiality threshold.
+
+### Finding codes
+
+| Code | Severity | Meaning | What to look at |
+|---|---|---|---|
+| `WRONG_AMOUNT` | confirmed → FAIL | The stated change is more than 10% off the ledger's. | The largest movements; whether something is misbooked. |
+| `WRONG_DIRECTION` | confirmed → FAIL | It says "rose" and the account fell, or the reverse. | The ledger row. |
+| `WRONG_PERCENT` | confirmed → FAIL | The stated percentage change is off. | The ledger's % column. |
+| `WRONG_BALANCE` | confirmed → FAIL | A stated "to"/"from" balance is off. | The ledger row. |
+| `…_NEAR` | advisory → REVIEW | Any of the four above, 5–10% off: close, but outside tolerance. | Whether the rounding is acceptable. |
+| `WRONG_CAUSE` | confirmed → FAIL | The cause's transactions moved less than 25% of the change (10% when the sentence says *partly*). | The evidence: the cause's flat transactions, then the real movers. |
+| `PARTIAL_EXPLANATION` | confirmed → FAIL | The cause explains some, but less than the wording claims. | The unexplained movers in the evidence. |
+| `REASON_NOT_FOUND` | advisory → REVIEW | No transaction mentions the stated cause. | The real movers listed; the cause may be recorded in other words. |
+| `WEAK_REASON_MATCH` | advisory → REVIEW | Only part of the reason's wording matched, so the matched transactions may belong to another cause. | Whether the matched memos really are this cause. |
+| `REASON_NOT_SEARCHABLE` | advisory → REVIEW | The reason contains only generic words. | The movers. |
+| `SUPPORT_RESTS_ON_MODEL_TERMS` | advisory → REVIEW | The cause is supported only by words the model proposed. | Whether those transactions belong to the cause. |
+| `POSSIBLE_MISCLASSIFICATION` | advisory → REVIEW | An expense of this cause sits in an account its vendor does not normally use: missing from this account, or inflating it. | The vendor's usual account; the reclassified change. |
+| `ACCOUNT_NOT_FOUND` | advisory → REVIEW | The sentence names no account in the chart. | Which account is meant. |
+
+### Resolve actions
+
+| Action | Use when | Teaches Proven something? |
+|---|---|---|
+| **Confirm defect** | The explanation is wrong. This is the product working. | No: it is the value delivered. |
+| **Wrong evidence** | The explanation is right; Proven matched the wrong transactions. | Yes |
+| **Misread sentence** | Proven read the account, amount or reason wrongly. | Yes |
+| **Accept convention** | Rounding, wording or a booking convention Proven should learn. | Yes |
+| **Out of scope** | It is a judgement, not something the ledger can settle. | No, by design |
+| **Missing evidence** | The ledger supplied does not contain what is needed. | No: it is a data request |
+
+Locally, resolutions are appended to `.proven/resolutions.jsonl`. On the hosted demo they are
+temporary.
+
+### Checking Proven against an answer key
+
+The **Close** menu also lists synthetic closes from the held-out test split, one per error type.
+Each has a line under the explanation, for example:
+
+> Ground truth (synthetic): wrong cause — must fail; culprit transactions TX-1057, TX-1046. The
+> other 2 claim(s) are correct.
+
+Check that the target claim got the required verdict, that its finding cites those transaction
+IDs, and that the other claims passed.
+
+### The Benchmark tab
+
+It runs the full synthetic benchmark on the server: choose the **Split** (the held-out test
+split by default) and the number of **Closes** (440 by default), then **Run both phrasings**.
+It runs automatically the first time you open the tab and takes a few seconds.
+
+- **Summary** compares *seen* phrasing (wording the lexicon covers) with *held-out* phrasing (the
+  same causes in words it has never seen). The rows to watch are **Controls failed** and
+  **Unsafe PASS**, which must both be 0. **Decided without a person** is coverage, reported
+  separately on purpose.
+- **By family** breaks the results down by error type. Use **Seen** / **Held-out** to switch
+  phrasing. **Met** is the share meeting the family's requirement, shown in red below 90%.
+  **Finding raised** is whether the expected finding appeared, and **Evidence recall** is
+  whether the culprit transactions were cited.
+
+### A three-minute walkthrough of the demo close
+
+1. **Coverage:** 9 claims, 4 PASS, 3 FAIL, 2 REVIEW, and one sentence ("…$1.2M quarterly
+   run-rate") listed as not extracted rather than hidden.
+2. **Legal (FAIL):** wrong amount, and the finding below it explains why: a misbooked invoice,
+   shown in the evidence as "(other account)". "If reclassified" shows +$90,000.
+3. **Marketing (FAIL):** the amount is right, but DevSummit is only 33% of it. The rest is the
+   same misbooked legal invoice, flagged from this side too.
+4. **Contractors (FAIL):** the redesign cost $11,000 in both months, so it moved $0. The
+   increase is a $22,300 mobile-app contract.
+5. **Travel (REVIEW):** no transaction mentions customer visits. September's company offsite is
+   shown as the actual mover; Proven does not call it wrong, because the cause may be recorded
+   in other words.
+6. **Edit the text:** change "$90K" to "$45K" in the Legal sentence and press **Verify**. Legal
+   turns to REVIEW: the amount now matches the books, but the misbooked invoice is still flagged.
+7. **Benchmark tab:** 0 unsafe PASS and 0 failed controls under both phrasings, and coverage
+   falling from 90% to 11% on unseen wording, which is what the model-assisted extractor is for.
 
 ---
 
@@ -130,8 +234,11 @@ Two things differ from running locally:
 |---|---|---|
 | direction | Did it rise or fall as stated? | contradiction → FAIL |
 | change / percent / balances | By the stated amount, at the precision it was written to? | >10% off → FAIL; 5–10% → REVIEW |
-| attribution | Do the transactions matching the stated reason account for the movement, as much as the wording claims? | cause moved <25% → **FAIL wrong cause**; less than claimed → **FAIL partial explanation**; not found → REVIEW |
+| attribution | Do the transactions matching the stated reason account for the movement, as much as the wording claims? | cause moved <25% (<10% for *partly*) → **FAIL wrong cause**; less than claimed → **FAIL partial explanation**; not found or weak match → REVIEW |
 | classification | Is an expense matching the reason booked against its vendor's usual account, either missing from this account or inflating it? | always REVIEW (advisory) |
+
+A vendor has a "usual account" once at least 3 of its other transactions exist and at least 80%
+of them land in one account.
 
 **Verdict algebra**, carried over unchanged from Aptio:
 
@@ -140,8 +247,7 @@ Two things differ from running locally:
 - else if no check actually ran → **REVIEW** (an absence of findings is not a pass);
 - else → **PASS**.
 
-Every threshold lives in one `Policy` object, is recorded on each run, and is shown to the
-reviewer.
+Every threshold lives in one `Policy` object in `verify.py`, and is recorded on each run.
 
 ---
 
@@ -209,7 +315,7 @@ The generator's self-test caught them, and they were corrected.
 
 **7. Network off, enforced at runtime.**
 
-- `netguard.py` refuses every non-loopback connection before a byte leaves the process. The
+- `netguard.py` refuses every non-loopback connection before a byte leaves the process. The local
   server installs it at startup, and the test suite runs under it.
 - The Claude path is opt-in (`--allow-network`) and sends **only the explanation text and the
   chart of accounts**: never a transaction, vendor, memo or amount.
@@ -217,7 +323,8 @@ The generator's self-test caught them, and they were corrected.
 - It uses `claude-opus-5-5` with structured output, and opts into the API's server-side refusal
   fallback (`fallbacks="default"`).
 
-**8. Small on purpose.** About 3,200 lines of Python (much of it docstrings, the synthetic world and the demo ledger) plus one page:
+**8. Small on purpose.** About 3,200 lines of Python (much of it docstrings, the synthetic world
+and the demo ledger) plus one page:
 
 - standard library only, enforced by an AST test;
 - no framework, no database, no build step;
@@ -237,7 +344,7 @@ the *reasons*.
 ## Results
 
 `python -m proven benchmark --n 440` runs the test split: 440 closes and 1,090 claims per
-phrasing, in about 1.5 seconds each.
+phrasing, in about 1.5 seconds each. The Benchmark tab runs the same thing.
 
 ![Benchmark view](docs/benchmark.png)
 
@@ -307,7 +414,76 @@ What does not exist yet: a training run.
 
 ---
 
-## Layout
+## Running and deploying
+
+### Locally
+
+Python 3.10+, no packages. From the repository root:
+
+```bash
+python -m proven serve
+```
+
+```bash
+python -m proven showcase
+```
+
+```bash
+python -m proven benchmark --n 440
+```
+
+```bash
+python -m proven verify --ledger my_gl_export.csv --explanation commentary.txt
+```
+
+```bash
+python -m proven generate --split train --n 5000 --out train.jsonl
+```
+
+`pip install .` also installs these as a `proven` command (`proven serve`, `proven showcase`, …).
+
+A ledger CSV needs the columns `id, date, account, vendor, memo, amount`; amounts may use
+thousands separators or accounting parentheses. The two most recent months become the prior and
+current periods.
+
+The optional Claude extractor needs `pip install anthropic` and an API key, and must be enabled
+explicitly:
+
+```bash
+python -m proven serve --allow-network
+```
+
+### Tests
+
+```bash
+python -m pytest proven/tests -q
+```
+
+140 tests, including negative controls (inputs that must *not* be flagged), the benchmark floors,
+an AST check that the package imports nothing outside the standard library, the HTTP API, and the
+Vercel entry point. If the TypeScript compiler (`tsc`) is installed, the console's script is
+also type-checked under `--strict`.
+
+### On Vercel
+
+The repository deploys to Vercel as it is: import it at <https://vercel.com/new> and press
+Deploy, with no settings to change. Every push to `main` redeploys. `vercel.json` copies the
+console's three static files into `public/`, where Vercel serves them from its CDN. Every
+`/api/*` request goes to one Python function, `api/index.py`, which reuses the same request
+handler as `python -m proven serve`.
+
+Two things differ from running locally:
+
+- **Resolutions are temporary.** They are written under `/tmp`, the only writable path on
+  Vercel, so they last only as long as the function instance. Run locally to keep them.
+- **The network guard is not installed.** Vercel's runtime talks to its host process over a
+  Unix socket, which the guard would refuse; the status bar therefore says "Network off" without
+  "(enforced)". The hosted demo still makes no outbound calls: the Claude extractor refuses to
+  run unless the process explicitly allowed the network, and this one does not.
+
+---
+
+## Layout and API
 
 ```
 proven/
@@ -324,22 +500,18 @@ proven/
   netguard.py   network-off, enforced
   server.py     stdlib HTTP server + JSON API
   web/          the reviewer console (HTML, CSS, JS checked by tsc --strict)
-  tests/        tests, incl. negative controls, isolation and benchmark floors
+  tests/        140 tests
 api/index.py    the Vercel function (wraps the same request handler)
 vercel.json     static console from the CDN, /api/* to the function
+docs/           the screenshots in this README
 ```
 
-API endpoints:
-
-| Method | Path |
-|---|---|
-| GET | `/api/config` |
-| GET | `/api/scenarios` |
-| GET | `/api/scenario?id=` |
-| GET | `/api/ledger.csv?id=` |
-| POST | `/api/verify` |
-| POST | `/api/benchmark` |
-| GET, POST | `/api/resolutions` |
-
-Resolutions are appended to `.proven/resolutions.jsonl`, together with the seconds the reviewer
-spent on the claim.
+| Method | Path | Does |
+|---|---|---|
+| GET | `/api/config` | versions, network status, extractors, policy, resolve actions |
+| GET | `/api/scenarios` | the showcase and one held-out synthetic close per error type |
+| GET | `/api/scenario?id=` | a close's ledger, explanation and (synthetic) ground truth |
+| GET | `/api/ledger.csv?id=` | a close's ledger as a CSV |
+| POST | `/api/verify` | explanation + scenario or CSV ledger → full report |
+| POST | `/api/benchmark` | `{split, n, phrasing}` → per-family results |
+| GET, POST | `/api/resolutions` | list or record reviewer decisions |
