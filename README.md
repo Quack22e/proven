@@ -17,6 +17,9 @@ stated cause actually accounts for the movement. Every flag cites the transactio
 Team **Oski's Back Office** (UC Berkeley): Julien Bergeron-Palmer (data generation
 infrastructure), Aarnav Bhat (ML / RL architecture), Arun Yama.
 
+**Live demo: <https://proven-lac.vercel.app>**: opens on the demo close; nothing to install.
+The [review guide](#how-to-review-on-the-website) below walks through the screen.
+
 ![The review console on the demo close](docs/review.png)
 
 **Contents:** [Try it](#try-it) · [How to review on the website](#how-to-review-on-the-website) ·
@@ -28,7 +31,7 @@ infrastructure), Aarnav Bhat (ML / RL architecture), Arun Yama.
 
 ## Try it
 
-- **Online.** The hosted demo on Vercel needs nothing installed and opens on the demo close.
+- **Online.** Open <https://proven-lac.vercel.app>. Nothing to install; it opens on the demo close.
 - **On your machine.** Python 3.10+ and nothing else: no packages, no build step, no API key.
   From the repository root:
 
@@ -466,8 +469,9 @@ also type-checked under `--strict`.
 
 ### On Vercel
 
-The repository deploys to Vercel as it is: import it at <https://vercel.com/new> and press
-Deploy, with no settings to change. Every push to `main` redeploys. `vercel.json` copies the
+The live demo, <https://proven-lac.vercel.app>, is this repository deployed on Vercel; every push
+to `main` redeploys it. To deploy your own copy, import the repository at
+<https://vercel.com/new> and press Deploy, with no settings to change. `vercel.json` copies the
 console's three static files into `public/`, where Vercel serves them from its CDN. Every
 `/api/*` request goes to one Python function, `api/index.py`, which reuses the same request
 handler as `python -m proven serve`.
