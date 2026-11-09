@@ -10,3 +10,7 @@ dist/
 
 # Local reviewer state: resolutions recorded in the console.
 .proven/
+
+# Vercel build output and local link.
+public/
+.vercel/

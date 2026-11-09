@@ -61,6 +61,22 @@ template, and **Upload CSV** checks any explanation against your own export.
 The optional Claude extractor needs `pip install anthropic` and an API key, and must be enabled
 explicitly with `python -m proven serve --allow-network`.
 
+### Hosted on Vercel
+
+The repository deploys to Vercel as it is: import it at <https://vercel.com/new> and press
+Deploy, with no settings to change. `vercel.json` copies the console's three static files into
+`public/`, where Vercel serves them from its CDN. Every `/api/*` request goes to one Python
+function, `api/index.py`, which reuses the same request handler as `python -m proven serve`.
+
+Two things differ from running locally:
+
+- **Resolutions are temporary.** They are written under `/tmp`, the only writable path on
+  Vercel, so they last only as long as the function instance. Run locally to keep them.
+- **The network guard is not installed.** Vercel's runtime talks to its host process over a
+  Unix socket, which the guard would refuse. The hosted demo still makes no outbound calls: the
+  Claude extractor refuses to run unless the process explicitly allowed the network, and this one
+  does not.
+
 ---
 
 ## A three-minute demo
@@ -309,6 +325,8 @@ proven/
   server.py     stdlib HTTP server + JSON API
   web/          the reviewer console (HTML, CSS, JS checked by tsc --strict)
   tests/        tests, incl. negative controls, isolation and benchmark floors
+api/index.py    the Vercel function (wraps the same request handler)
+vercel.json     static console from the CDN, /api/* to the function
 ```
 
 API endpoints:
