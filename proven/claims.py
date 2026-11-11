@@ -108,6 +108,7 @@ def split_reason(sentence: str) -> tuple[str, str | None, Strength]:
 
 
 def read_direction(head: str) -> int | None:
+    """+1 if the head says the account rose, -1 if it fell, None if it says neither."""
     up, down = _UP.search(head), _DOWN.search(head)
     if up and (not down or up.start() < down.start()):
         return 1
@@ -146,6 +147,7 @@ def read_figures(head: str) -> tuple[Figure | None, Figure | None, Figure | None
 
 
 def read_sentence(sentence: str, ledger: Ledger) -> Reading:
+    """Everything `admit()` and the rule extractor read from one sentence, without a model."""
     head, driver, strength = split_reason(sentence)
     change, percent, prior, current = read_figures(head)
     return Reading(head=head, driver=driver, direction=read_direction(head),
@@ -154,6 +156,7 @@ def read_sentence(sentence: str, ledger: Ledger) -> Reading:
 
 
 def has_figures(sentence: str) -> bool:
+    """Whether a sentence states any money figure or percentage at all."""
     return bool(find_money(sentence) or find_percents(sentence))
 
 
@@ -228,6 +231,7 @@ _TOKEN = re.compile(r"[a-z0-9][a-z0-9&'\-]*")
 
 @dataclass(frozen=True)
 class Term:
+    """One search term for a stated reason, and where it came from (quote, lexicon or model)."""
     text: str
     origin: str      # "quote" | "lexicon" | "model"
 
@@ -302,6 +306,7 @@ class ClaimProposal:
 
 @dataclass(frozen=True)
 class Rejection:
+    """A proposal `admit()` refused, and why. Reported in the run, never silently dropped."""
     quote: str
     reason: str
     extractor: str
@@ -312,6 +317,7 @@ class Rejection:
 
 @dataclass(frozen=True)
 class Claim:
+    """An admitted claim: what one sentence asserts, read deterministically. Carries no verdict."""
     claim_id: str
     start: int
     end: int

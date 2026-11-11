@@ -56,3 +56,9 @@ def test_formatting():
     assert fmt_money(50412.4) == "$50,412"
     assert fmt_money(-12040) == "-$12,040"
     assert fmt_signed(100) == "+$100"
+
+
+def test_full_figures_and_currency_codes():
+    full = parse_money("$1,250,000")
+    assert full.value == 1_250_000 and full.half_unit == 0.5
+    assert parse_money("USD 2.5M").value == pytest.approx(2_500_000)

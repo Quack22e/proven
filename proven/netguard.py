@@ -82,8 +82,10 @@ def allow_network() -> None:
 
 
 def network_allowed() -> bool:
+    """True only if this process explicitly allowed the network and the guard is not installed."""
     return bool(_state["network_allowed"]) and not _state["installed"]
 
 
 def installed() -> bool:
+    """Whether the guard is active in this process."""
     return bool(_state["installed"])

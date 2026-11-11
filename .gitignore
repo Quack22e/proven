@@ -14,3 +14,9 @@ dist/
 # Vercel build output and local link.
 public/
 .vercel/
+
+# Editor and OS files.
+.DS_Store
+.idea/
+.vscode/
+*.swp

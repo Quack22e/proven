@@ -17,6 +17,9 @@ a verdict, and a PASS never rests on anything only a model asserted.
 
 The package imports nothing outside the standard library and itself;
 `proven/tests/test_isolation.py` asserts that by AST.
+
+Start the reviewer console with `python -m proven serve`, or try the hosted demo
+at https://proven-lac.vercel.app.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

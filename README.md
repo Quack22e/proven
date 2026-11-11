@@ -14,6 +14,18 @@ explanations, and a correct amount can come with the wrong reason. Proven reads 
 finds each claim, and checks it against the general ledger: amount, direction, and whether the
 stated cause actually accounts for the movement. Every flag cites the transactions behind it.
 
+**At a glance**
+
+- **Three verdicts per claim.** PASS when the ledger agrees, FAIL when it contradicts the
+  sentence, REVIEW when the ledger cannot settle it.
+- **Evidence, not opinion.** Every flag names the transactions behind it, by ID.
+- **No model makes the call.** An optional language model may help read sentences; every verdict
+  comes from arithmetic over the ledger.
+- **Runs offline.** Python's standard library only, and the local server refuses outbound
+  connections.
+- **Status:** a working demo, tested on synthetic data only. See [Results](#results) for what the
+  numbers do and do not show.
+
 Team **Oski's Back Office** (UC Berkeley): Julien Bergeron-Palmer (data generation
 infrastructure), Aarnav Bhat (ML / RL architecture), Arun Yama.
 
@@ -91,7 +103,8 @@ beside the claim you are reading.
    switches the list to **All** so you can audit it.
 6. **Record a decision.** In **Resolve**, choose what is true, write *why* (at least 10
    characters; a decision nobody can re-read cannot become a test), and press **Record**. The
-   section confirms "Recorded: …". The time you spent on the claim is recorded with it.
+   section confirms "Recorded: …" and the card's header shows "resolved: …". The time you spent
+   on the claim is recorded with it.
 7. **Change the inputs and re-check.** **Edit text** turns the explanation into an editable box;
    change a figure or a reason, then press **Verify** (or Ctrl/Cmd+Enter). **Show checked text**
    returns to the underlined view. **Upload CSV** checks the explanation against your own ledger
@@ -436,7 +449,8 @@ python -m proven verify --ledger my_gl_export.csv --explanation commentary.txt
 python -m proven generate --split train --n 5000 --out train.jsonl
 ```
 
-`pip install .` also installs these as a `proven` command (`proven serve`, `proven showcase`, …).
+`pip install .` also installs these as a `proven` command (`proven serve`, `proven showcase`, …),
+and `--version` prints the installed version.
 
 A ledger CSV needs the columns `id, date, account, vendor, memo, amount`; amounts may use
 thousands separators or accounting parentheses. The two most recent months become the prior and
@@ -455,10 +469,20 @@ python -m proven serve --allow-network
 python -m pytest proven/tests -q
 ```
 
-139 tests, including negative controls (inputs that must *not* be flagged), the benchmark floors,
-an AST check that the package imports nothing outside the standard library, the HTTP API, and the
-Vercel entry point. If the TypeScript compiler (`tsc`) is installed, the console's script is
-also type-checked under `--strict`.
+153 tests, including negative controls (inputs that must *not* be flagged), the benchmark floors
+on both splits, AST checks that the package imports nothing outside the standard library and that
+every public function is documented, the HTTP API, the command line and the Vercel entry point.
+If the TypeScript compiler (`tsc`) is installed, the console's script is also type-checked under
+`--strict`.
+
+### Changing the checks
+
+- Every new check needs a negative control: a correct explanation it must *not* flag. A check
+  that flags sound work costs more than it catches.
+- Re-run `python -m proven benchmark` and report the seen and held-out columns separately.
+  Unsafe PASS and failed controls must stay at 0; coverage is reported on its own, never folded
+  into a single score.
+- Thresholds live in `Policy` (`proven/verify.py`). Change them there, not in the checks.
 
 ### On Vercel
 
@@ -497,7 +521,7 @@ proven/
   netguard.py   network-off, enforced
   server.py     stdlib HTTP server + JSON API
   web/          the reviewer console (HTML, CSS, JS checked by tsc --strict)
-  tests/        139 tests
+  tests/        153 tests
 api/index.py    the Vercel function (wraps the same request handler)
 vercel.json     static console from the CDN, /api/* to the function
 docs/           the screenshots in this README

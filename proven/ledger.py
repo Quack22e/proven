@@ -34,6 +34,7 @@ TOTAL_ALIASES = (
 
 @dataclass(frozen=True)
 class Transaction:
+    """One posted transaction. `amount` is positive for an expense, negative for a credit."""
     id: str
     date: str          # ISO date, "2026-10-14"
     account: str
@@ -55,6 +56,7 @@ class Transaction:
 
 @dataclass(frozen=True)
 class Account:
+    """An account in the chart, with the aliases a writer may use for it."""
     name: str
     aliases: tuple[str, ...] = ()
 
@@ -64,6 +66,7 @@ class Account:
 
 @dataclass(frozen=True)
 class Variance:
+    """An account's balance in the prior and current period, and the change between them."""
     prior: float
     current: float
 
@@ -122,6 +125,11 @@ def default_aliases(name: str) -> tuple[str, ...]:
 
 @dataclass
 class Ledger:
+    """A company's transactions, its chart of accounts, and the two periods being compared.
+
+    Validated on construction: every transaction must book to an account in the
+    chart, and transaction ids must be unique.
+    """
     entity: str
     prior_period: str      # "2026-09"
     current_period: str    # "2026-10"

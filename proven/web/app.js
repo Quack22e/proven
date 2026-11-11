@@ -421,7 +421,7 @@ function claimItem(result, report, open) {
     h("summary", {},
       h("span", { class: `verdict v-${result.verdict}` }, result.verdict),
       h("span", { class: "claim-quote" }, h("span", { class: "claim-id" }, id), claim.quote),
-      h("span", { class: "claim-reason" }, result.reason, state.resolved[id] ? h("span", { class: "muted" }, ` · resolved: ${state.resolved[id]}`) : null)),
+      h("span", { class: "claim-reason" }, result.reason, h("span", { class: "muted resolved-note" }, state.resolved[id] ? ` · resolved: ${state.resolved[id]}` : ""))),
     h("div", { class: "claim-body" },
       reconstruction(result, report),
       checksSection(result.checks),
@@ -568,6 +568,9 @@ function resolveSection(result, report) {
       });
       const label = select.options[select.selectedIndex].text;
       state.resolved[id] = label;
+      // Show the decision in the card's header now, not only after the list re-renders.
+      const headerNote = document.querySelector(`#claim-${id} .resolved-note`);
+      if (headerNote) headerNote.textContent = ` · resolved: ${label}`;
       status.className = "resolve-status ok";
       status.textContent = `Recorded: ${label}, appended to the resolutions log.`;
     } catch (error) {

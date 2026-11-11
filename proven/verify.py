@@ -69,6 +69,7 @@ class Policy:
 
 
 class Verdict(str, Enum):
+    """PASS, FAIL or REVIEW. Only `verify_claim` produces one."""
     PASS = "PASS"
     FAIL = "FAIL"
     REVIEW = "REVIEW"
@@ -80,6 +81,7 @@ ADVISORY = "advisory"
 
 @dataclass
 class Finding:
+    """One problem with a claim: a code, a severity, a summary, the detail, and evidence ids."""
     code: str
     severity: str
     summary: str
@@ -92,6 +94,7 @@ class Finding:
 
 @dataclass
 class Check:
+    """One check on a claim: whether it ran, its outcome, and what it compared."""
     name: str
     ran: bool
     outcome: str
@@ -103,6 +106,7 @@ class Check:
 
 @dataclass
 class ClaimResult:
+    """A claim's verdict and everything behind it, as shown on its card in the console."""
     claim: Claim
     verdict: Verdict
     computed_verdict: Verdict
@@ -224,6 +228,10 @@ def _compare_figure(name: str, code: str, actual: float, shown: str, stated: Fig
 # ── the claim ────────────────────────────────────────────────────────────
 
 def verify_claim(claim: Claim, ledger: Ledger, policy: Policy | None = None) -> ClaimResult:
+    """Check one admitted claim against the ledger and return its verdict and evidence.
+
+    Deterministic, and makes no network or model call.
+    """
     policy = policy or Policy()
     checks: list[Check] = []
     findings: list[Finding] = []

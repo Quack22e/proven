@@ -84,3 +84,16 @@ def test_a_refusal_produces_no_proposals(network_on):
     extractor = ClaudeExtractor(client=FakeClient([claim(LEGAL)], stop_reason="refusal"))
     assert extractor.propose(EXPLANATION, ledger()) == []
     assert extractor.transmissions[0]["stop_reason"] == "refusal"
+
+
+class BrokenClient(FakeClient):
+    def _create(self, **kwargs):
+        self.requests.append(kwargs)
+        return SimpleNamespace(stop_reason="end_turn",
+                               content=[SimpleNamespace(type="text", text="not json")])
+
+
+def test_a_malformed_response_produces_no_proposals(network_on):
+    extractor = ClaudeExtractor(client=BrokenClient([]))
+    assert extractor.propose(EXPLANATION, ledger()) == []
+    assert extractor.transmissions[0]["error"] == "response was not valid JSON"

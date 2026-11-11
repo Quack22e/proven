@@ -69,3 +69,10 @@ def test_labels_are_well_formed(family):
         assert target.culprits and all(scenario.ledger.txn(t) for t in target.culprits)
     else:
         assert target.culprits == []
+
+
+def test_heldout_phrasing_changes_only_the_wording():
+    seen, held = generate(123), generate(123, phrasing="heldout")
+    assert held.explanation == generate(123, phrasing="heldout").explanation
+    assert held.ledger.sha256() == seen.ledger.sha256()
+    assert held.explanation != seen.explanation

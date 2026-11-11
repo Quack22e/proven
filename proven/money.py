@@ -117,6 +117,7 @@ def parse_money(text: str) -> Figure | None:
 
 
 def parse_percent(text: str) -> Figure | None:
+    """The single percentage `text` consists of, or None."""
     found = find_percents(text)
     return found[0] if len(found) == 1 else None
 
@@ -148,8 +149,10 @@ def fmt_money(value: float) -> str:
 
 
 def fmt_signed(value: float) -> str:
+    """'+$1,200' / '-$1,200': a movement, with its sign always shown."""
     return ("+" if value > 0.005 else "") + fmt_money(value)
 
 
 def fmt_pct(share: float) -> str:
+    """A share (0.33) as a whole percentage ('33%')."""
     return f"{share * 100:.0f}%"

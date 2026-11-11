@@ -64,10 +64,12 @@ MIN_NOTE = 10
 
 
 class BadRequest(ValueError):
+    """A request the reviewer can fix; returned as HTTP 400 with the message."""
     pass
 
 
 def scenarios() -> list[dict]:
+    """The showcase close and one held-out synthetic close per family, for the Close menu."""
     out = [{"id": "showcase", "kind": "showcase",
             "title": f"{showcase.ENTITY} — October 2026 close"}]
     test_seeds = seeds("test", len(FAMILIES))
@@ -79,6 +81,7 @@ def scenarios() -> list[dict]:
 
 
 def load_scenario(scenario_id: str) -> dict:
+    """A close by id: the showcase, or `syn-<seed>`. Raises BadRequest for anything else."""
     if scenario_id == "showcase":
         return {"id": "showcase", "title": f"{showcase.ENTITY} — October 2026 close",
                 "explanation": showcase.EXPLANATION, "ledger": showcase.ledger(),
@@ -94,6 +97,7 @@ def load_scenario(scenario_id: str) -> dict:
 
 
 class App:
+    """The API's behaviour, independent of HTTP: verify, benchmark, config and resolutions."""
     def __init__(self, data_dir: Path):
         self.data_dir = data_dir
         self.resolutions = data_dir / "resolutions.jsonl"
@@ -174,6 +178,7 @@ class App:
 
 
 def make_handler(app: App):
+    """A request-handler class bound to one App, for `http.server` or Vercel."""
     class Handler(BaseHTTPRequestHandler):
         server_version = f"proven/{__version__}"
 
@@ -259,11 +264,13 @@ def make_handler(app: App):
 
 def create_server(host: str = "127.0.0.1", port: int = 8765,
                   data_dir: Path | str = ".proven") -> ThreadingHTTPServer:
+    """A threaded HTTP server for the console. Port 0 picks a free port (used by the tests)."""
     return ThreadingHTTPServer((host, port), make_handler(App(Path(data_dir))))
 
 
 def serve(host: str = "127.0.0.1", port: int = 8765, allow_network: bool = False,
           data_dir: str = ".proven") -> None:
+    """Run the console until interrupted. Installs the network guard unless `allow_network`."""
     if allow_network:
         netguard.allow_network()
     else:

@@ -53,6 +53,7 @@ HISTORY, PRIOR, CURRENT = PERIODS
 
 @dataclass(frozen=True)
 class Recurring:
+    """A vendor billed every month, with its usual amount and memo."""
     vendor: str
     base: float
     memo: str
@@ -60,6 +61,7 @@ class Recurring:
 
 @dataclass(frozen=True)
 class Event:
+    """Something that moves an account: who bills it, how it is described, and how much it costs."""
     key: str
     vendor: str
     memos: tuple[str, ...]
@@ -71,6 +73,7 @@ class Event:
 
 @dataclass(frozen=True)
 class AccountSpec:
+    """One account of the synthetic company: aliases, recurring vendors and two possible events."""
     name: str
     aliases: tuple[str, ...]
     narrative: tuple[str, ...]    # aliases a writer would open a sentence with
@@ -257,6 +260,7 @@ ENTITIES = ("Arcadia Labs", "Brightfield Health", "Cobalt Freight", "Driftwood A
 
 @dataclass(frozen=True)
 class Family:
+    """A kind of synthetic claim, and the verdict it requires (PASS, FAIL or NOT_PASS)."""
     name: str
     kind: str                       # "control" | "defect"
     requirement: str                # "PASS" | "FAIL" | "NOT_PASS"
@@ -283,6 +287,7 @@ FAMILY_BY_NAME = {f.name: f for f in FAMILIES + (DISTRACTOR,)}
 
 @dataclass
 class Label:
+    """The answer key for one claim: its family, requirement, expected findings and culprits."""
     quote: str
     family: str
     kind: str
@@ -297,6 +302,7 @@ class Label:
 
 @dataclass
 class Scenario:
+    """One synthetic close: a ledger, its commentary, and a label per claim."""
     scenario_id: str
     seed: int
     split: str
@@ -315,15 +321,18 @@ class Scenario:
 
 
 def split_of(seed: int) -> str:
+    """'test' for every fifth seed, 'train' otherwise."""
     return "test" if seed % 5 == 0 else "train"
 
 
 def family_of(seed: int) -> Family:
+    """The family a seed generates; cycles through all families within each split."""
     # Cycling on seed // 5 keeps both splits balanced across families.
     return FAMILIES[(seed // 5) % len(FAMILIES)]
 
 
 def seeds(split: str, n: int, start: int = 0) -> list[int]:
+    """The first `n` seeds belonging to a split."""
     out, seed = [], start
     while len(out) < n:
         if split_of(seed) == split:
@@ -391,6 +400,7 @@ _MAJORITY = ("primarily due to", "mainly driven by", "largely because of")
 
 def sentence(rng: random.Random, alias: str, direction: int, amount: str, phrase: str,
              strength: str = "full", percent: str | None = None, prior_period: bool = False) -> str:
+    """One sentence of commentary, in one of a few phrasings writers actually use."""
     verb = rng.choice(_UP if direction > 0 else _DOWN)
     connector = rng.choice(_MAJORITY if strength == "majority" else _FULL)
     reason = f"{phrase} in September" if prior_period else phrase
@@ -407,6 +417,10 @@ def sentence(rng: random.Random, alias: str, direction: int, amount: str, phrase
 # ── the generator ────────────────────────────────────────────────────────
 
 def generate(seed: int, family: Family | None = None, phrasing: str = "seen") -> Scenario:
+    """One reproducible synthetic close: the same seed always gives the same ledger and text.
+
+    `phrasing='heldout'` describes each cause in words the lexicon has never seen.
+    """
     rng = random.Random(seed)
     family = family or family_of(seed)
     builder = _Builder(rng)
@@ -509,4 +523,5 @@ def generate(seed: int, family: Family | None = None, phrasing: str = "seen") ->
 
 
 def generate_split(split: str, n: int, phrasing: str = "seen") -> list[Scenario]:
+    """`n` closes from one split, in seed order."""
     return [generate(seed, phrasing=phrasing) for seed in seeds(split, n)]

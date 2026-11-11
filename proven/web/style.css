@@ -1,6 +1,7 @@
 /* Proven reviewer console. One token set; components consume tokens only. */
 
 :root {
+  color-scheme: light dark;
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 

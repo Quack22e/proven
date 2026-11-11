@@ -124,3 +124,8 @@ def test_rule_extractor_proposes_one_claim_per_assertion():
     text = "October commentary.\nLegal costs rose $90K because of our funding round.\nThanks."
     proposals = RuleExtractor().propose(text, LEDGER)
     assert len(proposals) == 1 and proposals[0].change_text == "$90K"
+
+
+def test_in_large_part_reads_as_a_majority_claim():
+    _head, driver, strength = split_reason("Legal rose $90K, in large part due to the fundraise.")
+    assert (driver, strength) == ("the fundraise", Strength.MAJORITY)

@@ -189,3 +189,8 @@ def test_policy_is_applied_and_reported():
     report = run(text, book, policy=strict)
     assert report["claims"][0]["verdict"] == "FAIL"
     assert report["run"]["policy"]["amount_rel_tolerance"] == 0.0
+
+
+def test_a_reason_made_only_of_generic_words_is_review():
+    result = check("Legal costs rose $91K due to higher costs.", ledger(series_b(91_240)))
+    assert result["verdict"] == "REVIEW" and codes(result) == ["REASON_NOT_SEARCHABLE"]

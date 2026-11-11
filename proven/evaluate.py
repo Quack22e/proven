@@ -41,6 +41,7 @@ FALSE_FAIL = -0.5
 
 
 def requirement_met(requirement: str, verdict: str) -> bool:
+    """Whether a verdict satisfies a family's requirement (PASS, FAIL or NOT_PASS)."""
     if requirement == "PASS":
         return verdict == "PASS"
     if requirement == "FAIL":
@@ -49,6 +50,7 @@ def requirement_met(requirement: str, verdict: str) -> bool:
 
 
 def evidence_scores(cited: set[str], culprits: list[str]) -> tuple[float | None, float | None]:
+    """(recall, precision) of the cited transactions against the culprits, or (None, None)."""
     if not culprits:
         return None, None
     hits = len(cited & set(culprits))
@@ -87,6 +89,7 @@ class _Tally:
 
 
 def score_claim(label: Label, result: dict | None) -> dict:
+    """Verdict, requirement, finding, evidence and reward for one labelled claim."""
     verdict = result["verdict"] if result else "MISSED"
     findings = result["findings"] if result else []
     codes = {f["code"] for f in findings}
@@ -100,6 +103,11 @@ def score_claim(label: Label, result: dict | None) -> dict:
 
 def evaluate(split: str = "test", n: int = 220, policy: Policy | None = None,
              phrasing: str = "seen") -> dict:
+    """Run the benchmark over `n` synthetic closes of one split and phrasing.
+
+    Returns per-family rows plus controls, defects and coverage, each reported
+    separately; there is deliberately no single overall score.
+    """
     scenarios = generate_split(split, n, phrasing)
     tallies: dict[str, _Tally] = defaultdict(_Tally)
     failures: list[dict] = []

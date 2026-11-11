@@ -55,3 +55,9 @@ def test_reward_is_asymmetric():
     assert reward("FAIL", {"T1"}, label("FAIL")) == 1.0           # right verdict, right evidence
     assert reward("FAIL", {"T9"}, label("FAIL")) == 0.5           # right verdict, wrong evidence
     assert reward("REVIEW", {"T1"}, label("FAIL")) == 0.25        # flagged, not decided
+
+
+def test_train_split_holds_the_same_floors():
+    train = evaluate("train", 110)
+    assert train["controls"]["fails"] == 0
+    assert train["defects"]["unsafe_passes"] == 0
