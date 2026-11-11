@@ -162,8 +162,8 @@ def has_figures(sentence: str) -> bool:
 #: A declared calibration table: how a writer refers to a cause, and the words
 #: that cause leaves in a ledger's memo and vendor fields. It is data, it is
 #: reviewed like code, and every entry is exercised by a test. Adding to it is
-#: the in-product version of Aptio's calibration rule — and like one, an entry
-#: that makes sound explanations fail is a regression.
+#: a calibration decision, and an entry that makes sound explanations fail is a
+#: regression.
 LEXICON: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     # (name, phrases a writer uses, words the cause leaves in vendor/memo fields)
     ("financing", ("funding", "financing", "fundrais", "series a", "series b", "series c",

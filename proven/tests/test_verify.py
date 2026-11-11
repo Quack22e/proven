@@ -57,7 +57,7 @@ def test_wrong_direction_fails():
 
 
 def test_an_unsigned_decrease_is_not_a_contradiction():
-    # The fourth false-positive class: magnitudes are quoted unsigned.
+    # Magnitudes are quoted unsigned: "fell $40K" does not contradict -$40K.
     book = ledger(Transaction("P1", "2026-09-10", LEGAL, "Meridian Legal Group",
                               "Patent dispute — settlement payment", 40_000))
     result = check("Legal costs fell $40K, reflecting the patent dispute settlement in September.", book)

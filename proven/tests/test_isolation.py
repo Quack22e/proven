@@ -33,9 +33,3 @@ def test_only_stdlib_and_self():
                 continue        # imported inside a function, not at module load
             offenders.append(f"{path.name}:{node.lineno} imports {root}")
     assert not offenders, offenders
-
-
-def test_proven_does_not_reach_into_the_aptio_repository():
-    for path in sorted(PACKAGE.glob("*.py")):
-        roots = {root for _node, root in imports(path)}
-        assert not roots & {"aptio", "core", "pipeline", "schemas", "storage", "providers"}, path

@@ -1,4 +1,4 @@
-"""Reading figures, and the rounding false-positive class that must never come back."""
+"""Reading figures, and why a rounded figure is not a contradiction."""
 import pytest
 
 from proven.money import compare, find_money, find_percents, fmt_money, fmt_signed, parse_money
@@ -40,7 +40,7 @@ def test_percentages_are_points():
 
 
 def test_a_rounded_figure_agrees_with_the_value_it_rounds():
-    # The class that produced 34 false positives in Aptio: "$90K" for $91,240.
+    # Rounding is not a contradiction: "$90K" for $91,240.
     assert compare(91_240, parse_money("$90K"), 0.05, 0.10) == "agree"
     assert compare(90_400, parse_money("$90K"), 0.0, 0.0) == "agree"   # written precision alone
 

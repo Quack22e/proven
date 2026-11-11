@@ -7,8 +7,8 @@ real one is a company's most sensitive data. So the generator builds a company,
 injects the events that move its accounts, and then writes the commentary —
 correctly, or with exactly one defect of a declared family. Because the cause is
 injected, the right answer is known by construction rather than by re-running
-the checker, which is the method Aptio used for its mutation studies: the
-expected outcome follows from the *shape of the edit*.
+the checker: the expected outcome follows from the *shape of the edit*, so the
+checker never grades itself.
 
 What it shows: whether the checks catch each defect family, cite the right
 transactions, and leave correct explanations alone. What it cannot show: how

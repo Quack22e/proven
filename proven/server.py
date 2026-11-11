@@ -43,8 +43,7 @@ STATIC = {"/": ("index.html", "text/html; charset=utf-8"),
           "/style.css": ("style.css", "text/css; charset=utf-8")}
 MAX_BODY = 4 * 1024 * 1024
 
-#: The closed set of things a reviewer can conclude about one exception, carried over from
-#: Aptio's review design.
+#: The closed set of things a reviewer can conclude about one exception.
 #: The record *is* the decision — there is no form to fill in afterwards.
 ACTIONS = (
     {"id": "confirm_defect", "label": "Confirm defect",

@@ -6,12 +6,11 @@ WHAT IS REPORTED, AND WHAT IS NEVER COMBINED
     expected finding was raised, and whether the findings cited the culprit
     transactions (evidence recall and precision);
   * controls: the false-alarm rate (a correct explanation not passed) and,
-    separately, the FAIL count on controls — Aptio's kill criterion K3 is that
-    any negative control failing means the checker is not ready to be pointed
-    at anybody's work;
+    separately, the FAIL count on controls, which must be zero: a checker
+    that fails correct work is not ready to be pointed at anybody's work;
   * defects: the catch rate and, separately, the unsafe-PASS count — a PASS on
-    an explanation known to be wrong. K2 is the one number no amount of
-    coverage compensates for;
+    an explanation known to be wrong, the one number no amount of coverage
+    compensates for;
   * coverage: the share of claims decided (PASS or FAIL) without a person.
 
 There is no single quality score. A checker that decides 5% of claims and one

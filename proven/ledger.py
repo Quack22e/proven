@@ -9,10 +9,9 @@ vendor (does this invoice usually land in this account?).
 WHAT IS DECLARED, NOT INFERRED
 
 The chart of accounts — names and the aliases a writer may use for them — is
-supplied with the ledger. Aptio's consulting reconciler inferred relationships
-from column names and reached a measured precision of 0.0; the lesson carried
-here is that what an account is called is a fact someone states, never a guess
-the checker makes. `default_aliases()` exists only for an uploaded CSV that
+supplied with the ledger. A checker that infers what an account is from column
+names or wording manufactures findings out of its own guesses, so here what an
+account is called is a fact someone states, never a guess the checker makes. `default_aliases()` exists only for an uploaded CSV that
 carries no chart, and it is mechanical (the name, lower-cased and split on "&").
 """
 from __future__ import annotations

@@ -243,7 +243,7 @@ It runs automatically the first time you open the tab and takes a few seconds.
 A vendor has a "usual account" once at least 3 of its other transactions exist and at least 80%
 of them land in one account.
 
-**Verdict algebra**, carried over unchanged from Aptio:
+**Verdict algebra:**
 
 - any confirmed finding → **FAIL**;
 - else any advisory finding → **REVIEW**;
@@ -275,9 +275,8 @@ whether a booking is wrong is an accounting judgement. FAIL is reserved for cont
 re-executing arithmetic establishes on its own.
 
 **3. Compare at the precision a figure was written to.** "$90K" for a movement of $91,240 is not
-an error. Aptio's verifier once flagged 34 sound financial items by forgetting this. Figures keep
-their text, and the comparison uses the half-unit of the last written digit plus a declared
-tolerance.
+an error, and a checker that flags it is worse than no checker. Figures keep their text, and the
+comparison uses the half-unit of the last written digit plus a declared tolerance.
 
 **4. Evidence is transaction IDs, chosen deliberately.** A finding that cannot say what was
 claimed, what the ledger shows, and which lines prove it is just a number disagreeing with
@@ -335,12 +334,6 @@ and the demo ledger) plus one page:
 
 Each of those can be added when a real deployment needs it. None was needed to find out whether
 the checks work.
-
-**9. Built on Aptio.** Proven is a condensed, self-contained build of the Aptio verification
-architecture: the three-valued verdict algebra, the propose/admit extraction boundary,
-written-precision comparison, the runtime network guard, and the closed set of reviewer actions.
-Aptio checks the arithmetic in AI-produced financial work; Proven applies the same discipline to
-the *reasons*.
 
 ---
 
@@ -462,7 +455,7 @@ python -m proven serve --allow-network
 python -m pytest proven/tests -q
 ```
 
-140 tests, including negative controls (inputs that must *not* be flagged), the benchmark floors,
+139 tests, including negative controls (inputs that must *not* be flagged), the benchmark floors,
 an AST check that the package imports nothing outside the standard library, the HTTP API, and the
 Vercel entry point. If the TypeScript compiler (`tsc`) is installed, the console's script is
 also type-checked under `--strict`.
@@ -504,7 +497,7 @@ proven/
   netguard.py   network-off, enforced
   server.py     stdlib HTTP server + JSON API
   web/          the reviewer console (HTML, CSS, JS checked by tsc --strict)
-  tests/        140 tests
+  tests/        139 tests
 api/index.py    the Vercel function (wraps the same request handler)
 vercel.json     static console from the CDN, /api/* to the function
 docs/           the screenshots in this README

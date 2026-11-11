@@ -2,12 +2,11 @@
 
 THE ONE LESSON THIS MODULE CARRIES
 
-Aptio's verifier once called 34 sound financial items contradictions because it
-compared a recomputed value against a stated one with a relative tolerance alone.
-The stated values had been rounded before they were written down. The fix —
-compare at the precision the figure was *written to* — is Aptio's kernel function
-`agrees_as_written`, and it is re-implemented here in a dozen lines so that this
-package stays self-contained.
+A checker that compares a recomputed value with a stated one using a relative
+tolerance alone calls rounded figures contradictions, because the stated value
+was rounded before it was written down. The fix is to compare at the precision
+the figure was *written to*: round the recomputed value the same way and see
+whether it lands on the stated one.
 
 Variance commentary is written in rounded figures as a matter of course: "$90K"
 for a movement of $91,240 is not an error, and a checker that flags it is worse
@@ -126,8 +125,8 @@ def compare(actual: float, stated: Figure, rel_tolerance: float, review_band: fl
     """'agree', 'near' or 'disagree' — three answers, because the honest one is sometimes the middle.
 
     Agreement is either written precision (the stated figure is what the actual
-    rounds to) or a relative tolerance against the larger of the two, the
-    kernel's symmetric definition. Between the tolerance and the review band the
+    rounds to) or a relative tolerance against the larger of the two, so that
+    neither side is privileged. Between the tolerance and the review band the
     answer is 'near': close enough that a person should decide, far enough that
     passing it would be a guess.
     """

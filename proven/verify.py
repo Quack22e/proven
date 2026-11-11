@@ -13,7 +13,7 @@ WHAT IS CHECKED
                     account than its vendor normally uses — either missing from
                     this account or inflating it?
 
-THE VERDICT ALGEBRA (Aptio's, unchanged)
+THE VERDICT ALGEBRA
 
     any CONFIRMED finding        -> FAIL    the explanation contradicts the books
     else any ADVISORY finding    -> REVIEW  a person must decide

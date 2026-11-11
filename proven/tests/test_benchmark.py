@@ -17,13 +17,13 @@ def heldout():
 
 
 def test_no_control_ever_fails(seen, heldout):
-    # Aptio's kill criterion K3, applied under both phrasings.
+    # A FAIL on correct work means the checker is not ready, under either phrasing.
     assert seen["controls"]["fails"] == 0
     assert heldout["controls"]["fails"] == 0
 
 
 def test_no_defect_is_ever_passed(seen, heldout):
-    # K2: the number no amount of coverage compensates for.
+    # A PASS on wrong work: the number no amount of coverage compensates for.
     assert seen["defects"]["unsafe_passes"] == 0
     assert heldout["defects"]["unsafe_passes"] == 0
     assert seen["defects"]["missed"] == 0
